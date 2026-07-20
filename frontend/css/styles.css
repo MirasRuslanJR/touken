@@ -103,7 +103,6 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; font-
   cursor: pointer; transition: background .14s, border-color .14s, transform .06s, box-shadow .14s;
   white-space: nowrap;
 }
-.btn:hover { background: var(--surface-2); border-color: var(--border-strong); }
 .btn:active { transform: translateY(1px); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .btn-primary { background: var(--accent-grad); border-color: transparent; color: #fff; box-shadow: 0 8px 18px -8px rgba(37, 99, 235, 0.6); }
