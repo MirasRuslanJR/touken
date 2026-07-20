@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Database (SQLite)
+touken.db
+*.sqlite
+*.sqlite3
+
+# Environment / editor / OS
+.env
+.DS_Store
+*.log
+.idea/
+.vscode/*
+!.vscode/extensions.json
