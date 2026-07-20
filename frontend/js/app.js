@@ -144,7 +144,7 @@
   var state = { user: null };
   var dash = {
     classes: null, classId: null, cls: null, students: [], surveys: [],
-    surveyId: null, analysis: null, loaded: false,
+    surveyId: null, analysis: null, prevAnalysis: null, loaded: false,
     filters: { isolate: true, bridge: true, mutual: true, community: "" },
     network: null, nodesDS: null, edgesDS: null,
   };
@@ -236,7 +236,18 @@
         return null;
       })
       .then(function (analysis) {
-        dash.analysis = analysis; dash.loaded = true;
+        dash.analysis = analysis;
+        // Подтягиваем предыдущий срез, чтобы показать резкое падение связей.
+        var idx = dash.surveys.findIndex(function (s) { return s.id === dash.surveyId; });
+        if (analysis && idx > 0) {
+          return API.get("/api/surveys/" + dash.surveys[idx - 1].id + "/analytics")
+            .then(function (prev) { dash.prevAnalysis = prev; })
+            .catch(function () { dash.prevAnalysis = null; });
+        }
+        dash.prevAnalysis = null;
+      })
+      .then(function () {
+        dash.loaded = true;
         mount(shell(dashView()));
         buildNetwork();
       })
@@ -269,8 +280,36 @@
 
   function dashView() {
     var sv = currentSurvey();
-    return h("div", {}, dashHeader(), srezPanel(sv), radarCard(),
+    return h("div", {}, dashHeader(), srezPanel(sv), dropBanner(), radarCard(),
       h("div", { class: "dash-grid" }, graphCard(sv), h("div", { class: "stack" }, metricsCard(), rosterCard())));
+  }
+
+  // Явный алерт о резком падении входящих связей ученика по сравнению с
+  // предыдущим срезом. Дополняет (не заменяет) подсветку на графе.
+  function dropBanner() {
+    var a = dash.analysis, prev = dash.prevAnalysis;
+    if (!a || !prev) return null;
+    var perNow = a.per_student, perPrev = prev.per_student;
+    var drops = [];
+    dash.students.forEach(function (s) {
+      var mNow = perNow[String(s.id)], mPrev = perPrev[String(s.id)];
+      if (!mNow || !mPrev) return;
+      var x = mPrev.in_degree, y = mNow.in_degree;
+      var sharp = (x - y >= 2) || (x >= 2 && y <= x / 2); // на 2+ или вдвое
+      if (y < x && sharp) drops.push({ name: s.full_name, id: s.id, from: x, to: y });
+    });
+    if (!drops.length) return null;
+    drops.sort(function (p, q) { return (p.to - p.from) - (q.to - q.from); }); // сильнее падение — выше
+    var items = drops.map(function (d) {
+      return h("div", { class: "dp-item" },
+        h("span", {}, "⚠"),
+        h("span", { style: { flex: "1" } }, h("b", {}, d.name), " — упало с " + d.from + " до " + d.to + " входящих связей с прошлого среза"),
+        h("button", { class: "btn btn-sm", onClick: function () { go("/student/" + d.id); } }, "Карточка"));
+    });
+    return h("div", { class: "dropbar" }, h("div", { class: "card-pad" },
+      h("div", { style: { fontWeight: "700", marginBottom: "8px", color: "var(--red)" } },
+        "⚠ Резкое падение связей: " + drops.length + " — относительно среза «" + prev.survey.title + "»"),
+      items));
   }
 
   function srezPanel(sv) {
@@ -367,8 +406,14 @@
     if (!a) body = emptyState("Нет данных", "Выберите срез.");
     else {
       var m = a.graph_metrics;
+      var wi = m.wellbeing_index != null ? m.wellbeing_index : 0;
+      var wiLabel = wi >= 70 ? "высокий уровень" : wi >= 45 ? "средний уровень" : "низкий уровень";
       body = h("div", {},
         h("div", { class: "tiles" },
+          h("div", { class: "tile tile-hero" },
+            h("div", { class: "tile-label" }, "Индекс благополучия класса"),
+            h("div", { class: "tile-value" }, wi),
+            h("div", { class: "tile-sub" }, wiLabel + " · шкала 0–100")),
           tile("Учеников", m.students),
           tile("Изоляты", m.isolates, "нет входящих выборов"),
           tile("Взаимные пары", m.mutual_pairs, "взаимность " + num(m.reciprocity * 100) + "%"),
@@ -412,7 +457,8 @@
     }
     return h("div", { class: "card" },
       h("div", { class: "card-head" }, h("h3", {}, "Ученики"), h("span", { class: "spacer" }),
-        dash.analysis ? h("button", { class: "btn btn-sm", onClick: reportModal }, "📄 Отчёт") : null),
+        dash.analysis ? h("button", { class: "btn btn-sm", onClick: exportXlsx }, "📊 Экспортировать отчёт") : null,
+        dash.analysis ? h("button", { class: "btn btn-sm", onClick: reportModal }, "📄 Печать/CSV") : null),
       h("div", { class: "card-pad", style: { paddingTop: "6px", paddingBottom: "6px" } }, body));
   }
 
@@ -424,18 +470,18 @@
   }
   function nodeStyle(n) {
     var base = PALETTE[n.group % PALETTE.length];
-    var color = { background: base, border: base, highlight: { background: base, border: "#0f172a" } };
+    var color = { background: base, border: base, highlight: { background: base, border: "#e8eefc" } };
     var bw = 2;
     if (dash.filters.isolate && n.isolate) { color = { background: "#fee2e2", border: "#ef4444", highlight: { background: "#fecaca", border: "#ef4444" } }; bw = 3; }
     var hidden = dash.filters.community !== "" && String(n.group) !== String(dash.filters.community);
-    return { id: n.id, label: n.label, title: n.title, value: n.value, color: color, borderWidth: bw, hidden: hidden };
+    return { id: n.id, label: n.label, title: n.title, size: n.size, color: color, borderWidth: bw, hidden: hidden };
   }
   function edgeStyle(e, visible) {
     var color = "#cbd5e1", width = 1, dashes = false;
     if (dash.filters.mutual && e.mutual) { color = "#2563eb"; width = 3; }
     if (dash.filters.bridge && e.bridge) { color = "#f59e0b"; width = 3; dashes = [6, 4]; }
     var hidden = dash.filters.community !== "" && (!visible.has(e.from) || !visible.has(e.to));
-    return { id: e.id, from: e.from, to: e.to, color: { color: color, highlight: "#0f172a" }, width: width, dashes: dashes, hidden: hidden };
+    return { id: e.id, from: e.from, to: e.to, color: { color: color, highlight: "#93c5fd" }, width: width, dashes: dashes, hidden: hidden };
   }
   function buildNetwork() {
     var a = dash.analysis;
@@ -446,7 +492,7 @@
     dash.nodesDS = new vis.DataSet(a.nodes.map(nodeStyle));
     dash.edgesDS = new vis.DataSet(a.edges.map(function (e) { return edgeStyle(e, visible); }));
     var options = {
-      nodes: { shape: "dot", scaling: { min: 10, max: 34 }, font: { size: 14, color: "#0f172a" } },
+      nodes: { shape: "dot", font: { size: 14, color: "#e8eefc" } },
       edges: { arrows: { to: { enabled: true, scaleFactor: 0.6 } }, smooth: { type: "continuous" } },
       physics: { stabilization: { iterations: 150 }, barnesHut: { gravitationalConstant: -9000, springLength: 110, springConstant: 0.035, damping: 0.28 } },
       interaction: { hover: true, tooltipDelay: 120, zoomView: true, dragNodes: true, dragView: true },
@@ -597,9 +643,9 @@
     var chips = risk.map(function (s) {
       var m = per[String(s.id)];
       var tag = (m.is_isolate ? " · изолят" : "") + ((m.alone_votes || 0) ? " · «один»×" + m.alone_votes : "");
-      return h("button", { class: "pill", style: { cursor: "pointer", borderColor: "#fecaca", color: "var(--red)" }, onClick: function () { go("/student/" + s.id); } }, s.full_name + tag);
+      return h("button", { class: "pill", style: { cursor: "pointer", borderColor: "rgba(239,68,68,0.45)", color: "var(--red)" }, onClick: function () { go("/student/" + s.id); } }, s.full_name + tag);
     });
-    return h("div", { class: "card", style: { marginBottom: "18px", borderColor: "#fecaca", background: "linear-gradient(180deg,#ffffff,#fff6f6)" } },
+    return h("div", { class: "card", style: { marginBottom: "18px", borderColor: "rgba(239,68,68,0.42)", background: "linear-gradient(180deg, rgba(239,68,68,0.12), rgba(239,68,68,0.03))" } },
       h("div", { class: "card-pad" },
         h("div", { style: { display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" } },
           h("span", { style: { fontSize: "22px" } }, "⚠️"),
@@ -608,6 +654,33 @@
             h("div", { class: "muted tiny" }, "Изоляты и ученики с номинациями «часто остаётся один» — требуют внимания")),
           h("span", { class: "badge badge-red" }, String(risk.length))),
         h("div", { class: "chip-row", style: { marginTop: "12px" } }, chips)));
+  }
+
+  /* -------------------------------------------------- экспорт в Excel (.xlsx) */
+  function exportXlsx() {
+    var a = dash.analysis;
+    if (!a) return;
+    if (typeof XLSX === "undefined") { alert("Библиотека Excel не загрузилась — нужен интернет."); return; }
+    var per = a.per_student, sv = currentSurvey();
+    var sorted = dash.students.slice().sort(function (x, y) {
+      var mx = per[String(x.id)], my = per[String(y.id)];
+      return ((mx && mx.in_degree) || 0) - ((my && my.in_degree) || 0);
+    });
+    var rows = [["Ученик", "Входящие связи", "Исходящие связи", "Взаимные выборы", "Изолят", "Betweenness centrality", "Сообщество (группа)"]];
+    sorted.forEach(function (s) {
+      var m = per[String(s.id)] || {};
+      rows.push([
+        s.full_name, m.in_degree || 0, m.out_degree || 0, m.mutual || 0,
+        m.is_isolate ? "да" : "нет", m.betweenness || 0, (m.community || 0) + 1,
+      ]);
+    });
+    var ws = XLSX.utils.aoa_to_sheet(rows);
+    ws["!cols"] = [{ wch: 26 }, { wch: 15 }, { wch: 15 }, { wch: 16 }, { wch: 8 }, { wch: 22 }, { wch: 18 }];
+    var wb = XLSX.utils.book_new();
+    var sheet = (sv ? sv.title : "Отчёт").replace(/[:\\/?*\[\]]/g, " ").slice(0, 28) || "Отчёт";
+    XLSX.utils.book_append_sheet(wb, ws, sheet);
+    var fname = "izolyat_" + String(dash.cls.name || "class").replace(/\s+/g, "_") + ".xlsx";
+    XLSX.writeFile(wb, fname);
   }
 
   /* -------------------------------------------------- отчёт (CSV/печать) */

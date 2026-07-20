@@ -9,11 +9,19 @@ from . import models  # noqa: F401  (register models on Base)
 from .database import Base, engine
 from .routers import auth, dashboard, public
 
-# Create tables on startup (works for SQLite and Supabase/PostgreSQL).
+# Create tables on startup in the configured Supabase/PostgreSQL database.
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Изолят", description="Раннее выявление социальной изоляции школьников")
 
+# CORS: allow_origins=["*"] is a DELIBERATE choice for the local demo /
+# hackathon, not a forgotten default. The front-end is served from the same
+# origin as the API, so CORS isn't actually needed for normal use; the
+# wildcard just makes it painless to open the survey page or the dashboard
+# from another device/host on the LAN during the demo. Auth uses a Bearer
+# token (not cookies) and allow_credentials is False, so a wildcard origin is
+# safe here. For a real deployment, replace "*" with the concrete front-end
+# origin(s).
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

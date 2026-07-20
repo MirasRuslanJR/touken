@@ -2,6 +2,19 @@
 (function () {
   "use strict";
 
+  // Рекурсивно добавляет ребёнка (узел, строку/число, вложенный массив, либо
+  // null/false — пропускается). Рекурсия важна: массивы могут быть вложенными
+  // (например, список блоков внутри списка детей), и без неё appendChild
+  // получил бы Array вместо Node.
+  function append(parent, kid) {
+    if (kid == null || kid === false) return;
+    if (Array.isArray(kid)) {
+      for (var i = 0; i < kid.length; i++) append(parent, kid[i]);
+      return;
+    }
+    parent.appendChild(typeof kid === "object" ? kid : document.createTextNode(String(kid)));
+  }
+
   function h(tag, props) {
     var e = document.createElement(tag);
     if (props) {
@@ -15,16 +28,19 @@
         else e.setAttribute(k, v);
       });
     }
-    for (var i = 2; i < arguments.length; i++) {
-      var kid = arguments[i];
-      if (kid == null || kid === false) continue;
-      if (Array.isArray(kid)) kid.forEach(function (kk) { if (kk != null && kk !== false) e.appendChild(typeof kk === "object" ? kk : document.createTextNode(String(kk))); });
-      else e.appendChild(typeof kid === "object" ? kid : document.createTextNode(String(kid)));
-    }
+    for (var i = 2; i < arguments.length; i++) append(e, arguments[i]);
     return e;
   }
+
+  // Совместимая с любым браузером очистка/замена содержимого (без replaceChildren).
+  function clear(node) { node.innerHTML = ""; }
+  function setContent(node) {
+    clear(node);
+    for (var i = 1; i < arguments.length; i++) append(node, arguments[i]);
+  }
+
   var root = document.getElementById("survey");
-  function mount(node) { root.replaceChildren(node); }
+  function mount(node) { clear(root); root.appendChild(node); }
 
   function api(method, url, body) {
     var opt = { method: method, headers: { "Content-Type": "application/json" } };
@@ -51,7 +67,10 @@
     mount(h("div", { class: "spinner" }));
     api("GET", "/api/public/surveys/" + surveyId + "/info")
       .then(function (info) {
-        if (!info.is_open) { mount(card([h("h2", { style: "font-size:20px;margin-bottom:8px" }, info.title || "Опрос"), showError("Этот опрос сейчас закрыт.")])); return; }
+        if (!info.is_open) {
+          mount(card([h("h2", { style: "font-size:20px;margin-bottom:8px" }, info.title || "Опрос"), showError("Этот опрос сейчас закрыт.")]));
+          return;
+        }
         renderIntro(info);
       })
       .catch(function (e) { mount(card(showError(e.message))); });
@@ -64,11 +83,11 @@
     function start() {
       var code = codeIn.value.trim().toUpperCase();
       if (!code) return;
-      msg.replaceChildren();
+      clear(msg);
       btn.disabled = true;
       api("POST", "/api/public/surveys/" + surveyId + "/start", { code: code })
         .then(function (data) { renderQuestions(code, data); })
-        .catch(function (e) { msg.replaceChildren(showError(e.message)); btn.disabled = false; });
+        .catch(function (e) { setContent(msg, showError(e.message)); btn.disabled = false; });
     }
     codeIn.addEventListener("keydown", function (e) { if (e.key === "Enter") start(); });
     btn.addEventListener("click", start);
@@ -107,13 +126,13 @@
 
     var submitBtn = h("button", { class: "btn btn-primary btn-lg", style: "width:100%;margin-top:8px" }, "Отправить ответы");
     submitBtn.addEventListener("click", function () {
-      msg.replaceChildren();
+      clear(msg);
       submitBtn.disabled = true;
       var answers = {};
       Object.keys(selections).forEach(function (k) { answers[k] = Array.from(selections[k]); });
       api("POST", "/api/public/surveys/" + surveyId + "/submit", { code: code, answers: answers })
         .then(function () { renderDone(); })
-        .catch(function (e) { msg.replaceChildren(showError(e.message)); submitBtn.disabled = false; });
+        .catch(function (e) { setContent(msg, showError(e.message)); submitBtn.disabled = false; });
     });
 
     mount(card([

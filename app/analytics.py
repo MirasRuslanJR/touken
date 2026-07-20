@@ -116,6 +116,25 @@ def build_analysis(students, choices):
     possible_pairs = n * (n - 1) / 2 if n > 1 else 1
     cohesion = round(len(mutual_pairs) / possible_pairs, 4) if possible_pairs else 0.0
 
+    # Единый индекс благополучия класса, 0..100. Взвешенное среднее четырёх
+    # долей (каждая в [0,1], больше = лучше):
+    #   * доля НЕ-изолятов (1 - isolates/n) — вес 0.40: изоляция — главная
+    #     проблема, которую ищет «Изолят», поэтому она весит больше всего;
+    #   * reciprocity (доля взаимных выборов) — вес 0.30: взаимные связи —
+    #     самый сильный положительный сигнал сплочённости;
+    #   * cohesion (взаимные пары / все возможные) — вес 0.15;
+    #   * density (плотность графа) — вес 0.15.
+    # Веса подобраны так, чтобы индекс в первую очередь отражал отсутствие
+    # изоляции и наличие взаимности, а плотность/сплочённость лишь уточняли.
+    non_isolated = (1 - len(isolates) / n) if n else 0.0
+    wellbeing_index = round(100 * (
+        0.40 * non_isolated
+        + 0.30 * reciprocity
+        + 0.15 * cohesion
+        + 0.15 * density
+    ))
+    wellbeing_index = max(0, min(100, wellbeing_index))
+
     graph_metrics = {
         "students": n,
         "positive_edges": len(edge_weight),
@@ -124,12 +143,29 @@ def build_analysis(students, choices):
         "density": density,
         "reciprocity": reciprocity,
         "cohesion": cohesion,
+        "wellbeing_index": wellbeing_index,
         "components": len(components),
         "communities": len(communities),
         "bridges": len(bridges),
     }
 
     # -------- vis-network payload --------
+    # Node radius = min-max normalised in_degree into a fixed pixel range, so
+    # the graph stays readable for ANY distribution (e.g. one popular student
+    # among many with zero incoming). Raw in_degree+1 could make one node
+    # dwarf the rest; here the biggest node is always SIZE_MAX and the
+    # smallest SIZE_MIN, and if everyone is equal (incl. all-zero) they share
+    # a neutral base size.
+    SIZE_MIN, SIZE_MAX, SIZE_BASE = 14.0, 40.0, 20.0
+    in_values = [in_deg.get(i, 0) for i in ids]
+    d_min = min(in_values) if in_values else 0
+    d_max = max(in_values) if in_values else 0
+
+    def node_size(value):
+        if d_max == d_min:
+            return SIZE_BASE
+        return round(SIZE_MIN + (value - d_min) / (d_max - d_min) * (SIZE_MAX - SIZE_MIN), 1)
+
     name_of = {s["id"]: s["full_name"] for s in students}
     vis_nodes = []
     for i in ids:
@@ -137,7 +173,7 @@ def build_analysis(students, choices):
         vis_nodes.append({
             "id": i,
             "label": name_of[i],
-            "value": m["in_degree"] + 1,
+            "size": node_size(m["in_degree"]),
             "group": m["community"],
             "isolate": m["is_isolate"],
             "alone_votes": m["alone_votes"],

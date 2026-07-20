@@ -1,41 +1,37 @@
 """
 Конфигурация приложения.
 
-Секреты (строка подключения к Supabase и ключ подписи токенов) читаются из
-переменных окружения — они НЕ хранятся в коде. Локально задай их через файл
-`.env` в корне проекта (см. `.env.example`), на проде — через настройки
-хостинга (Render/Railway/etc задают env vars в своей панели).
+ЕДИНСТВЕННОЕ, что нужно отредактировать — строка DATABASE_URL ниже.
+Никаких .env файлов: вставил строку подключения Supabase — и всё работает.
 """
 import json
 import os
 
-from dotenv import load_dotenv
-
-load_dotenv()  # подхватывает .env в корне проекта, если он есть
+# Автозагрузка файла .env (если он есть и установлен python-dotenv). Так можно
+# держать реальный пароль в .env (он не коммитится, см. .gitignore), а не в коде.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 # ============================================================================
-#  ПОДКЛЮЧЕНИЕ К SUPABASE
+#  ПОДКЛЮЧЕНИЕ К SUPABASE — три способа задать строку (в порядке приоритета):
 # ----------------------------------------------------------------------------
-#  Supabase -> Project Settings -> Database -> Connection string -> URI
-#  Замени схему на  postgresql+psycopg2://  и подставь свой пароль.
-#  Если прямое подключение (db.<ref>.supabase.co) не коннектится —
-#  возьми строку "Session pooler" (порт 5432), она работает по IPv4.
-#  Вставь готовую строку в .env как DATABASE_URL=... (см. .env.example).
+#  1) Файл .env в корне проекта:  DATABASE_URL=postgresql+psycopg2://...
+#     (рекомендуется — пароль не попадёт в публичный репозиторий).
+#  2) Переменная окружения DATABASE_URL (например, в панели Render).
+#  3) Прямо в строке-заглушке ниже (удобно, но не коммить реальный пароль).
+#
+#  Строку берёшь в Supabase -> Project Settings -> Database -> Connection
+#  string -> URI, схему меняешь на postgresql+psycopg2://. Если прямое
+#  подключение не коннектится — бери "Session pooler" (порт 5432, IPv4).
 # ============================================================================
-DATABASE_URL = os.environ.get("DATABASE_URL", "")
+DATABASE_URL = os.environ.get("DATABASE_URL") or \
+    "postgresql+psycopg2://postgres:PASSWORD@db.YOUR-PROJECT-REF.supabase.co:5432/postgres"
 
-# Секрет для подписи токенов входа. Задаётся в .env как SECRET_KEY=...
-SECRET_KEY = os.environ.get("SECRET_KEY", "")
-
-if not DATABASE_URL or not SECRET_KEY:
-    raise RuntimeError(
-        "Не заданы переменные окружения DATABASE_URL и/или SECRET_KEY.\n"
-        "Скопируй .env.example в .env и впиши свои значения:\n"
-        "  DATABASE_URL — Supabase -> Project Settings -> Database -> "
-        "Connection string -> URI (схема postgresql+psycopg2://)\n"
-        "  SECRET_KEY   — любая длинная случайная строка "
-        "(например: python -c \"import secrets; print(secrets.token_hex(32))\")"
-    )
+# Секрет для подписи токенов входа. Задай через .env или переменную окружения.
+SECRET_KEY = os.environ.get("SECRET_KEY") or "change-me-to-a-long-random-string-please"
 
 # Срок жизни токена входа (7 дней).
 TOKEN_TTL = 7 * 24 * 3600

@@ -366,9 +366,10 @@ def add_note(sid: int, data: NoteIn, user: Psychologist = Depends(get_current_ps
 @router.delete("/notes/{nid}")
 def delete_note(nid: int, user: Psychologist = Depends(get_current_psychologist), db: Session = Depends(get_db)):
     n = db.get(Note, nid)
-    if n and n.psychologist_id == user.id:
-        db.delete(n)
-        db.commit()
+    if not n or n.psychologist_id != user.id:
+        raise HTTPException(404, "Заметка не найдена")
+    db.delete(n)
+    db.commit()
     return {"ok": True}
 
 
@@ -385,9 +386,10 @@ def add_meeting(sid: int, data: MeetingIn, user: Psychologist = Depends(get_curr
 @router.delete("/meetings/{mid}")
 def delete_meeting(mid: int, user: Psychologist = Depends(get_current_psychologist), db: Session = Depends(get_db)):
     m = db.get(Meeting, mid)
-    if m and m.psychologist_id == user.id:
-        db.delete(m)
-        db.commit()
+    if not m or m.psychologist_id != user.id:
+        raise HTTPException(404, "Встреча не найдена")
+    db.delete(m)
+    db.commit()
     return {"ok": True}
 
 
@@ -415,7 +417,8 @@ def add_intervention(sid: int, data: InterventionIn, user: Psychologist = Depend
 @router.delete("/interventions/{iid}")
 def delete_intervention(iid: int, user: Psychologist = Depends(get_current_psychologist), db: Session = Depends(get_db)):
     iv = db.get(Intervention, iid)
-    if iv and iv.psychologist_id == user.id:
-        db.delete(iv)
-        db.commit()
+    if not iv or iv.psychologist_id != user.id:
+        raise HTTPException(404, "Вмешательство не найдено")
+    db.delete(iv)
+    db.commit()
     return {"ok": True}
