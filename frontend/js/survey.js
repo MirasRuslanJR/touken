@@ -62,6 +62,11 @@
     return h("div", { class: "alert alert-error", style: "margin-bottom:14px" }, msg);
   }
 
+  function initials(name) {
+    var p = String(name).trim().split(/\s+/);
+    return (((p[0] || "")[0] || "") + ((p[1] || "")[0] || "")).toUpperCase();
+  }
+
   function boot() {
     if (!surveyId) { mount(card(showError("Ссылка на опрос недействительна."))); return; }
     mount(h("div", { class: "spinner" }));
@@ -77,9 +82,9 @@
   }
 
   function renderIntro(info) {
-    var codeIn = h("input", { class: "input", placeholder: "Например, K7P2QT", style: "text-transform:uppercase;letter-spacing:2px;font-weight:600" });
+    var codeIn = h("input", { class: "input", placeholder: "Например, K7P2QT", style: "text-align:center;text-transform:uppercase;letter-spacing:4px;font-weight:800;font-size:18px" });
     var msg = h("div");
-    var btn = h("button", { class: "btn btn-primary btn-lg", style: "width:100%" }, "Начать опрос");
+    var btn = h("button", { class: "btn btn-primary btn-lg", style: "width:100%" }, "Начать опрос →");
     function start() {
       var code = codeIn.value.trim().toUpperCase();
       if (!code) return;
@@ -91,40 +96,62 @@
     }
     codeIn.addEventListener("keydown", function (e) { if (e.key === "Enter") start(); });
     btn.addEventListener("click", start);
-    mount(card([
-      h("h2", { style: "font-size:22px;margin-bottom:4px" }, info.title),
-      h("p", { class: "muted", style: "margin-bottom:18px" }, info.class_name + " · анонимный опрос"),
-      h("div", { class: "field", style: "margin-bottom:14px" }, h("label", {}, "Введите ваш код"), codeIn),
-      msg, btn,
-      h("p", { class: "muted tiny", style: "margin-top:16px;text-align:center" }, "Ответы анонимны. Другие ученики их не видят."),
-    ]));
+    mount(h("div", {},
+      h("div", { class: "survey-hero" },
+        h("div", { class: "hicon" }, "И"),
+        h("h1", {}, info.title),
+        h("div", { class: "sub" }, info.class_name + " · анонимный опрос")),
+      card([
+        h("div", { class: "field", style: "margin-bottom:14px" },
+          h("label", { style: "text-align:center" }, "Введите ваш код"), codeIn),
+        msg, btn,
+        h("p", { class: "muted tiny", style: "margin-top:16px;text-align:center" }, "🔒 Ответы анонимны. Другие ученики их не видят.")
+      ])));
   }
 
   function renderQuestions(code, data) {
     var selections = {}; // key -> Set of ids
     data.questions.forEach(function (q) { selections[q.key] = new Set(); });
+    var total = data.questions.length;
     var msg = h("div");
 
-    var blocks = data.questions.map(function (q) {
+    var bar = h("span");
+    var lbl = h("span", { class: "lbl" }, "0 из " + total);
+    var progress = h("div", { class: "survey-progress" }, lbl, h("div", { class: "bar" }, bar));
+    function updateProgress() {
+      var answered = 0;
+      data.questions.forEach(function (q) { if (selections[q.key].size > 0) answered++; });
+      lbl.textContent = "Отвечено " + answered + " из " + total;
+      bar.style.width = Math.round(answered / total * 100) + "%";
+    }
+
+    var cards = data.questions.map(function (q, idx) {
+      var qcard = h("div", { class: "q-card" });
       var hint = h("div", { class: "q-hint" }, "Можно выбрать до " + q.max + ". Выбрано: 0");
       var grid = h("div", { class: "choice-grid" });
       data.roster.forEach(function (st) {
-        var b = h("button", { class: "choice", type: "button" }, st.full_name);
+        var ini = h("span", { class: "ini" }, initials(st.full_name));
+        var b = h("button", { class: "choice", type: "button" }, ini, h("span", {}, st.full_name));
         b.addEventListener("click", function () {
           var set = selections[q.key];
-          if (set.has(st.id)) { set.delete(st.id); b.classList.remove("on"); }
+          if (set.has(st.id)) { set.delete(st.id); b.classList.remove("on"); ini.textContent = initials(st.full_name); }
           else {
             if (set.size >= q.max) return;
-            set.add(st.id); b.classList.add("on");
+            set.add(st.id); b.classList.add("on"); ini.textContent = "✓";
           }
           hint.textContent = "Можно выбрать до " + q.max + ". Выбрано: " + set.size;
+          qcard.classList.toggle("answered", set.size > 0);
+          updateProgress();
         });
         grid.appendChild(b);
       });
-      return h("div", { class: "q-block" }, h("div", { class: "q-title" }, q.text), hint, grid);
+      qcard.appendChild(h("div", { class: "q-head" }, h("span", { class: "q-num" }, String(idx + 1)), h("div", { class: "q-title" }, q.text)));
+      qcard.appendChild(hint);
+      qcard.appendChild(grid);
+      return qcard;
     });
 
-    var submitBtn = h("button", { class: "btn btn-primary btn-lg", style: "width:100%;margin-top:8px" }, "Отправить ответы");
+    var submitBtn = h("button", { class: "btn btn-primary btn-lg", style: "width:100%;margin-top:6px" }, "Отправить ответы");
     submitBtn.addEventListener("click", function () {
       clear(msg);
       submitBtn.disabled = true;
@@ -135,22 +162,22 @@
         .catch(function (e) { setContent(msg, showError(e.message)); submitBtn.disabled = false; });
     });
 
-    mount(card([
-      h("h2", { style: "font-size:20px;margin-bottom:2px" }, data.title),
-      h("p", { class: "muted", style: "margin-bottom:20px" }, data.class_name),
-      blocks,
-      msg, submitBtn,
-    ]));
+    mount(h("div", {},
+      h("div", { style: "text-align:center;margin-bottom:16px" },
+        h("h1", { style: "font-size:21px;letter-spacing:-0.02em" }, data.title),
+        h("div", { class: "muted", style: "font-size:14px;margin-top:4px" }, data.class_name)),
+      progress,
+      cards,
+      msg, submitBtn));
+    updateProgress();
     window.scrollTo(0, 0);
   }
 
   function renderDone() {
-    mount(card([
-      h("div", { style: "text-align:center;padding:20px 0" },
-        h("div", { style: "font-size:52px;margin-bottom:10px" }, "✓"),
-        h("h2", { style: "font-size:22px;margin-bottom:8px" }, "Спасибо!"),
-        h("p", { class: "muted" }, "Ваши ответы записаны. Повторно пройти опрос нельзя."))
-    ]));
+    mount(h("div", { style: "text-align:center;padding:34px 0" },
+      h("div", { class: "done-circle" }, "✓"),
+      h("h1", { style: "font-size:24px;margin-bottom:8px" }, "Спасибо!"),
+      h("p", { class: "muted", style: "max-width:360px;margin:0 auto" }, "Ваши ответы записаны. Повторно пройти опрос нельзя.")));
   }
 
   boot();

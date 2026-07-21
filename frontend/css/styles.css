@@ -302,7 +302,8 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; font-
   .modal-foot { flex-wrap: wrap; }
   .survey-shell { padding: 20px 14px 60px; }
   .q-title { font-size: 16.5px; }
-  .choice { padding: 12px 16px; font-size: 15px; }
+  .q-hint { margin-left: 0; }
+  .choice { padding: 10px 15px 10px 9px; font-size: 15px; }
 }
 /* ---- маленькие телефоны ---- */
 @media (max-width: 400px) {
@@ -323,15 +324,33 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; font-
 .code-card .cd { font-size: 21px; font-weight: 800; letter-spacing: 3px; font-family: ui-monospace, Menlo, monospace; color: var(--accent-3); }
 
 /* survey (student) page */
-.survey-shell { max-width: 660px; margin: 0 auto; padding: 28px 20px 70px; }
-.q-block { margin-bottom: 26px; }
-.q-title { font-weight: 750; font-size: 18px; margin-bottom: 4px; letter-spacing: -0.02em; }
-.q-hint { color: var(--text-3); font-size: 13px; margin-bottom: 13px; }
+.survey-shell { max-width: 640px; margin: 0 auto; padding: 26px 20px 80px; }
+.survey-hero { text-align: center; margin-bottom: 22px; }
+.survey-hero .hicon { width: 62px; height: 62px; border-radius: 18px; background: var(--accent-grad); display: grid; place-items: center; font-size: 30px; font-weight: 800; color: #fff; margin: 0 auto 14px; box-shadow: 0 14px 34px -8px rgba(37, 99, 235, 0.75); }
+.survey-hero h1 { font-size: 24px; letter-spacing: -0.02em; }
+.survey-hero .sub { color: var(--text-2); margin-top: 6px; font-size: 14px; }
+
+.survey-progress { display: flex; align-items: center; gap: 12px; padding: 12px 16px; margin-bottom: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; box-shadow: var(--shadow-sm); }
+.survey-progress .lbl { font-size: 12px; font-weight: 700; color: var(--text-2); white-space: nowrap; }
+.survey-progress .bar { flex: 1; height: 8px; background: var(--border); border-radius: 999px; overflow: hidden; min-width: 60px; }
+.survey-progress .bar > span { display: block; height: 100%; width: 0; background: var(--accent-grad); transition: width .35s ease; }
+
+.q-card { background: linear-gradient(180deg, #111c34, #0e1830); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; margin-bottom: 16px; transition: border-color .18s, box-shadow .18s; }
+.q-card.answered { border-color: rgba(59, 130, 246, 0.55); box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.25); }
+.q-head { display: flex; align-items: center; gap: 11px; margin-bottom: 2px; }
+.q-num { width: 30px; height: 30px; border-radius: 9px; background: var(--accent-50); color: var(--accent-3); font-weight: 800; font-size: 14px; display: grid; place-items: center; flex-shrink: 0; }
+.q-title { font-weight: 750; font-size: 17.5px; letter-spacing: -0.02em; }
+.q-hint { color: var(--text-3); font-size: 13px; margin: 2px 0 14px 41px; }
+
 .choice-grid { display: flex; flex-wrap: wrap; gap: 10px; }
-.choice { padding: 11px 17px; border-radius: 999px; border: 1.5px solid var(--border-strong); background: var(--surface-2); color: var(--text); cursor: pointer; font-size: 14.5px; font-weight: 600; transition: all .14s; }
+.choice { display: inline-flex; align-items: center; gap: 9px; padding: 9px 15px 9px 9px; border-radius: 999px; border: 1.5px solid var(--border-strong); background: var(--surface-2); color: var(--text); cursor: pointer; font-size: 14.5px; font-weight: 600; transition: all .14s; }
 .choice:hover { border-color: var(--accent); transform: translateY(-1px); }
+.choice .ini { width: 26px; height: 26px; border-radius: 50%; background: #0c1424; display: grid; place-items: center; font-size: 11px; font-weight: 800; color: var(--text-2); flex-shrink: 0; }
 .choice.on { background: var(--accent-grad); border-color: transparent; color: #fff; box-shadow: 0 10px 22px -8px rgba(37, 99, 235, 0.75); }
-.choice.on::before { content: "✓ "; font-weight: 800; }
+.choice.on .ini { background: rgba(255, 255, 255, 0.22); color: #fff; }
+
+.done-circle { width: 92px; height: 92px; border-radius: 50%; background: var(--green-50); border: 2px solid rgba(16, 185, 129, 0.55); color: var(--green); display: grid; place-items: center; font-size: 48px; margin: 6px auto 16px; animation: pop .32s cubic-bezier(.2, .8, .2, 1); }
+
 .progress { height: 9px; background: var(--border); border-radius: 999px; overflow: hidden; }
 .progress > span { display: block; height: 100%; background: var(--accent-grad); transition: width .3s; }
 
