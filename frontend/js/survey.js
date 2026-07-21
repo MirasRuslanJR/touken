@@ -109,68 +109,76 @@
       ])));
   }
 
+  // Пошаговый опрос: по одному вопросу на экран, с кнопками «Назад»/«Далее».
   function renderQuestions(code, data) {
     var selections = {}; // key -> Set of ids
     data.questions.forEach(function (q) { selections[q.key] = new Set(); });
     var total = data.questions.length;
+    var step = 0;
     var msg = h("div");
 
     var bar = h("span");
-    var lbl = h("span", { class: "lbl" }, "0 из " + total);
+    var lbl = h("span", { class: "lbl" });
     var progress = h("div", { class: "survey-progress" }, lbl, h("div", { class: "bar" }, bar));
-    function updateProgress() {
-      var answered = 0;
-      data.questions.forEach(function (q) { if (selections[q.key].size > 0) answered++; });
-      lbl.textContent = "Отвечено " + answered + " из " + total;
-      bar.style.width = Math.round(answered / total * 100) + "%";
-    }
+    var stepHost = h("div");
 
-    var cards = data.questions.map(function (q, idx) {
-      var qcard = h("div", { class: "q-card" });
-      var hint = h("div", { class: "q-hint" }, "Можно выбрать до " + q.max + ". Выбрано: 0");
-      var grid = h("div", { class: "choice-grid" });
-      data.roster.forEach(function (st) {
-        var ini = h("span", { class: "ini" }, initials(st.full_name));
-        var b = h("button", { class: "choice", type: "button" }, ini, h("span", {}, st.full_name));
-        b.addEventListener("click", function () {
-          var set = selections[q.key];
-          if (set.has(st.id)) { set.delete(st.id); b.classList.remove("on"); ini.textContent = initials(st.full_name); }
-          else {
-            if (set.size >= q.max) return;
-            set.add(st.id); b.classList.add("on"); ini.textContent = "✓";
-          }
-          hint.textContent = "Можно выбрать до " + q.max + ". Выбрано: " + set.size;
-          qcard.classList.toggle("answered", set.size > 0);
-          updateProgress();
-        });
-        grid.appendChild(b);
-      });
-      qcard.appendChild(h("div", { class: "q-head" }, h("span", { class: "q-num" }, String(idx + 1)), h("div", { class: "q-title" }, q.text)));
-      qcard.appendChild(hint);
-      qcard.appendChild(grid);
-      return qcard;
-    });
-
-    var submitBtn = h("button", { class: "btn btn-primary btn-lg", style: "width:100%;margin-top:6px" }, "Отправить ответы");
-    submitBtn.addEventListener("click", function () {
+    function submit(btn) {
       clear(msg);
-      submitBtn.disabled = true;
+      btn.disabled = true;
       var answers = {};
       Object.keys(selections).forEach(function (k) { answers[k] = Array.from(selections[k]); });
       api("POST", "/api/public/surveys/" + surveyId + "/submit", { code: code, answers: answers })
         .then(function () { renderDone(); })
-        .catch(function (e) { setContent(msg, showError(e.message)); submitBtn.disabled = false; });
-    });
+        .catch(function (e) { setContent(msg, showError(e.message)); btn.disabled = false; });
+    }
+
+    function renderStep() {
+      var q = data.questions[step];
+      var set = selections[q.key];
+      lbl.textContent = "Вопрос " + (step + 1) + " из " + total;
+      bar.style.width = Math.round((step + 1) / total * 100) + "%";
+
+      var qcard = h("div", { class: "q-card q-anim" });
+      var hint = h("div", { class: "q-hint" }, "Можно выбрать до " + q.max + ". Выбрано: " + set.size);
+      var grid = h("div", { class: "choice-grid" });
+      data.roster.forEach(function (st) {
+        var selected = set.has(st.id);
+        var ini = h("span", { class: "ini" }, selected ? "✓" : initials(st.full_name));
+        var b = h("button", { class: "choice" + (selected ? " on" : ""), type: "button" }, ini, h("span", {}, st.full_name));
+        b.addEventListener("click", function () {
+          if (set.has(st.id)) { set.delete(st.id); b.classList.remove("on"); ini.textContent = initials(st.full_name); }
+          else { if (set.size >= q.max) return; set.add(st.id); b.classList.add("on"); ini.textContent = "✓"; }
+          hint.textContent = "Можно выбрать до " + q.max + ". Выбрано: " + set.size;
+        });
+        grid.appendChild(b);
+      });
+      qcard.appendChild(h("div", { class: "q-head" }, h("span", { class: "q-num" }, String(step + 1)), h("div", { class: "q-title" }, q.text)));
+      qcard.appendChild(hint);
+      qcard.appendChild(grid);
+
+      var backBtn = h("button", { class: "btn", type: "button" }, "← Назад");
+      backBtn.addEventListener("click", function () { if (step > 0) { step--; renderStep(); } });
+      var last = step === total - 1;
+      var nextBtn = h("button", { class: "btn btn-primary", type: "button", style: "flex:1" }, last ? "Отправить ответы" : "Далее →");
+      nextBtn.addEventListener("click", function () {
+        if (last) submit(nextBtn);
+        else { step++; renderStep(); }
+      });
+      var nav = h("div", { class: "survey-nav" }, step > 0 ? backBtn : null, nextBtn);
+
+      setContent(stepHost, qcard, nav);
+      clear(msg);
+      window.scrollTo(0, 0);
+    }
 
     mount(h("div", {},
       h("div", { style: "text-align:center;margin-bottom:16px" },
         h("h1", { style: "font-size:21px;letter-spacing:-0.02em" }, data.title),
         h("div", { class: "muted", style: "font-size:14px;margin-top:4px" }, data.class_name)),
       progress,
-      cards,
-      msg, submitBtn));
-    updateProgress();
-    window.scrollTo(0, 0);
+      stepHost,
+      msg));
+    renderStep();
   }
 
   function renderDone() {
