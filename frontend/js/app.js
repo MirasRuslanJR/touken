@@ -504,6 +504,9 @@
     dash.network.once("stabilizationIterationsDone", function () {
       try { dash.network.fit({ animation: false }); } catch (e) {}
     });
+    // Резервный fit на случай, если событие стабилизации не сработает
+    // (мало узлов / отключённая физика) — граф всё равно впишется в экран.
+    setTimeout(function () { try { if (dash.network) dash.network.fit({ animation: false }); } catch (e) {} }, 500);
   }
   function applyFilters() {
     var a = dash.analysis;
