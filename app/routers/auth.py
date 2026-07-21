@@ -1,9 +1,10 @@
 """Psychologist authentication."""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import Psychologist
+from ..ratelimit import check as rate_limit, client_ip
 from ..schemas import LoginIn, RegisterIn
 from ..security import (
     create_token,
@@ -36,7 +37,9 @@ def register(data: RegisterIn, db: Session = Depends(get_db)):
 
 
 @router.post("/login")
-def login(data: LoginIn, db: Session = Depends(get_db)):
+def login(data: LoginIn, request: Request, db: Session = Depends(get_db)):
+    # Защита от брутфорса: не больше 10 попыток входа с одного IP за 5 минут.
+    rate_limit("login:" + client_ip(request), limit=10, window=300)
     email = data.email.strip().lower()
     user = db.query(Psychologist).filter(Psychologist.email == email).first()
     if not user or not verify_password(data.password, user.password_hash):

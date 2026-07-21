@@ -1,11 +1,14 @@
 """
 Конфигурация приложения.
 
-ЕДИНСТВЕННОЕ, что нужно отредактировать — строка DATABASE_URL ниже.
-Никаких .env файлов: вставил строку подключения Supabase — и всё работает.
+Задай два секрета через файл .env в корне проекта (см. .env.example):
+DATABASE_URL (строка подключения Supabase) и SECRET_KEY. Файл .env не
+коммитится — пароль и секрет не попадут в репозиторий.
 """
 import json
 import os
+import secrets
+import sys
 
 # Автозагрузка файла .env (если он есть и установлен python-dotenv). Так можно
 # держать реальный пароль в .env (он не коммитится, см. .gitignore), а не в коде.
@@ -31,7 +34,20 @@ DATABASE_URL = os.environ.get("DATABASE_URL") or \
     "postgresql+psycopg2://postgres:PASSWORD@db.YOUR-PROJECT-REF.supabase.co:5432/postgres"
 
 # Секрет для подписи токенов входа. Задай через .env или переменную окружения.
-SECRET_KEY = os.environ.get("SECRET_KEY") or "change-me-to-a-long-random-string-please"
+# Если он не задан (или оставлен дефолтным), НЕ используем предсказуемый ключ:
+# генерируем случайный на время работы процесса. Так демо не падает, но и
+# подделать токен по известному секрету нельзя. Токены сбросятся при
+# перезапуске — для продакшена обязательно задай постоянный SECRET_KEY.
+_DEFAULT_SECRET = "change-me-to-a-long-random-string-please"
+SECRET_KEY = os.environ.get("SECRET_KEY")
+if not SECRET_KEY or SECRET_KEY == _DEFAULT_SECRET:
+    print(
+        "⚠️  SECRET_KEY не задан — использую временный случайный ключ. "
+        "Токены входа сбросятся при перезапуске сервера. Для продакшена "
+        "задай постоянный SECRET_KEY в .env.",
+        file=sys.stderr,
+    )
+    SECRET_KEY = secrets.token_urlsafe(48)
 
 # Срок жизни токена входа (7 дней).
 TOKEN_TTL = 7 * 24 * 3600

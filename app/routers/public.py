@@ -3,13 +3,14 @@
 A student only ever provides a code. They never see analytics, and they only
 see the class roster (to make their choices) after a valid code is supplied.
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..config import QUESTION_KEYS, effective_questions
 from ..database import get_db
 from ..models import Choice, SchoolClass, Student, Survey, SurveyResponse
+from ..ratelimit import check as rate_limit, client_ip
 
 router = APIRouter(prefix="/api/public", tags=["public"])
 
@@ -50,7 +51,11 @@ def survey_info(svid: int, db: Session = Depends(get_db)):
 
 
 @router.post("/surveys/{svid}/start")
-def survey_start(svid: int, payload: dict, db: Session = Depends(get_db)):
+def survey_start(svid: int, payload: dict, request: Request, db: Session = Depends(get_db)):
+    # Защита от перебора кодов учеников скриптом. Лимит подобран так, чтобы
+    # целый класс за одним школьным Wi-Fi (общий IP через NAT) спокойно
+    # проходил опрос, но автоматический перебор был непрактичен.
+    rate_limit("start:" + client_ip(request), limit=40, window=60)
     sv = _survey_or_404(db, svid)
     if not sv.is_open:
         raise HTTPException(403, "Опрос закрыт.")
