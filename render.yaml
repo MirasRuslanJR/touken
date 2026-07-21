@@ -1,0 +1,20 @@
+# Render Blueprint для «Изолят».
+# Деплой: на Render нажми New + -> Blueprint -> подключи этот репозиторий.
+# (Либо задеплой вручную как Web Service — см. README, раздел «Деплой на Render».)
+services:
+  - type: web
+    name: izolyat
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      # Python 3.12 — под него есть готовые колёса psycopg2 (под 3.13/3.14 может не собраться).
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      # Секрет для токенов входа сгенерируется автоматически.
+      - key: SECRET_KEY
+        generateValue: true
+      # Строку подключения к Supabase впиши вручную в дашборде (секрет, не в коде).
+      - key: DATABASE_URL
+        sync: false

@@ -159,9 +159,9 @@
     var frag = document.createDocumentFragment();
     frag.appendChild(h("header", { class: "topbar" },
       h("a", { class: "brand", href: "#/" }, h("span", { class: "logo" }, "И"), "Изолят"),
-      h("span", { class: "pill" }, "🔒 Только психолог"),
+      h("span", { class: "pill hide-sm" }, "🔒 Только психолог"),
       h("span", { class: "spacer" }),
-      state.user ? h("span", { class: "who" }, state.user.email) : null,
+      state.user ? h("span", { class: "who hide-sm" }, state.user.email) : null,
       h("button", { class: "btn btn-sm", onClick: logout }, "Выйти")));
     frag.appendChild(h("main", { class: "page" }, content));
     return frag;
@@ -499,6 +499,11 @@
     };
     dash.network = new vis.Network(container, { nodes: dash.nodesDS, edges: dash.edgesDS }, options);
     dash.network.on("click", function (params) { if (params.nodes && params.nodes.length) go("/student/" + params.nodes[0]); });
+    // Вписываем весь граф в контейнер после раскладки — чтобы на маленьких
+    // экранах он корректно уменьшался и был виден целиком.
+    dash.network.once("stabilizationIterationsDone", function () {
+      try { dash.network.fit({ animation: false }); } catch (e) {}
+    });
   }
   function applyFilters() {
     var a = dash.analysis;

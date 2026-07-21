@@ -74,14 +74,15 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; font-
 /* layout */
 .topbar {
   position: sticky; top: 0; z-index: 30;
-  display: flex; align-items: center; gap: 14px;
-  padding: 13px 26px;
-  background: rgba(8, 12, 24, 0.72);
+  display: flex; align-items: center; gap: 12px; flex-wrap: nowrap;
+  padding: 12px 26px;
+  background: rgba(8, 12, 24, 0.78);
   backdrop-filter: saturate(160%) blur(16px);
   -webkit-backdrop-filter: saturate(160%) blur(16px);
   border-bottom: 1px solid var(--border);
+  box-shadow: 0 8px 24px -18px rgba(37, 99, 235, 0.6);
 }
-.brand { display: flex; align-items: center; gap: 11px; font-weight: 800; font-size: 18px; letter-spacing: -0.03em; color: var(--text); }
+.brand { display: flex; align-items: center; gap: 11px; font-weight: 800; font-size: 18px; letter-spacing: -0.03em; color: var(--text); flex-shrink: 0; }
 .brand:hover { text-decoration: none; }
 .brand .logo {
   width: 34px; height: 34px; border-radius: 11px;
@@ -89,8 +90,8 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; font-
   display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 17px;
   box-shadow: 0 6px 20px -4px rgba(37, 99, 235, 0.8);
 }
-.topbar .spacer { flex: 1; }
-.topbar .who { color: var(--text-2); font-size: 13px; }
+.topbar .spacer { flex: 1; min-width: 0; }
+.topbar .who { color: var(--text-2); font-size: 13px; display: inline-block; vertical-align: middle; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .page { width: 100%; max-width: 1300px; margin: 0 auto; padding: 26px; }
 .page-narrow { max-width: 940px; }
 
@@ -98,7 +99,7 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; font-
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); transition: box-shadow .18s ease, border-color .18s ease; }
 .card:hover { border-color: #2c3e64; }
 .card-pad { padding: 20px 22px; }
-.card-head { display: flex; align-items: center; gap: 12px; padding: 17px 22px; border-bottom: 1px solid var(--border); }
+.card-head { display: flex; align-items: center; gap: 10px; padding: 17px 22px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
 .card-head h3 { font-size: 15.5px; }
 .card-head .spacer { flex: 1; }
 .section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); margin-bottom: 10px; }
@@ -253,8 +254,38 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; font-
 /* grids */
 .dash-grid { display: grid; grid-template-columns: 1.7fr 1fr; gap: 22px; align-items: start; }
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
-@media (max-width: 980px) { .dash-grid, .two-col { grid-template-columns: 1fr; } }
-@media (max-width: 640px) { .page { padding: 16px; } .topbar { padding: 11px 16px; } .list-item { flex-direction: column; gap: 4px; } .list-item .when { flex-basis: auto; } .net { height: 460px; } }
+@media (max-width: 980px) {
+  .dash-grid, .two-col { grid-template-columns: 1fr; }
+  .net { height: 520px; }
+}
+@media (max-width: 760px) {
+  .page { padding: 18px 14px; }
+  .net { height: 440px; }
+  .card-pad { padding: 16px 16px; }
+  .card-head { padding: 14px 16px; }
+  .modal-body { padding: 18px; }
+}
+@media (max-width: 560px) {
+  .topbar { padding: 10px 14px; gap: 10px; }
+  .hide-sm { display: none !important; }
+  .net { height: 360px; }
+  .toolbar { gap: 8px 12px; }
+  .tiles { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
+  .tile .tile-value { font-size: 23px; }
+  .tile-hero .tile-value { font-size: 34px; }
+  .list-item { flex-direction: column; gap: 4px; }
+  .list-item .when { flex-basis: auto; }
+  .btn { padding: 8px 12px; }
+  .btn-lg { padding: 12px 18px; font-size: 15px; }
+  h1 { font-size: 21px !important; }
+}
+@media (max-width: 400px) {
+  .page { padding: 14px 11px; }
+  .net { height: 300px; }
+  .brand { font-size: 16px; }
+  .brand .logo { width: 30px; height: 30px; font-size: 15px; }
+  .code-grid { grid-template-columns: 1fr 1fr; }
+}
 
 /* codes / QR */
 .qr-box { display: grid; place-items: center; padding: 14px; background: #ffffff; border: 1px solid var(--border); border-radius: var(--radius); }
