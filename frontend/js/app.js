@@ -145,8 +145,9 @@
   var dash = {
     classes: null, classId: null, cls: null, students: [], surveys: [],
     surveyId: null, analysis: null, prevAnalysis: null, loaded: false,
-    filters: { isolate: true, bridge: true, mutual: true, community: "" },
+    filters: { isolate: true, bridge: true, mutual: true, community: "", anon: false },
     network: null, nodesDS: null, edgesDS: null,
+    anonMap: null, anonMapFor: null,
   };
 
   function stopNetwork() {
@@ -361,7 +362,12 @@
         checkbox("Изоляты", dash.filters.isolate, function (v) { dash.filters.isolate = v; applyFilters(); }),
         checkbox("Мосты", dash.filters.bridge, function (v) { dash.filters.bridge = v; applyFilters(); }),
         checkbox("Взаимные", dash.filters.mutual, function (v) { dash.filters.mutual = v; applyFilters(); }),
-        communitySelect(a));
+        communitySelect(a),
+        h("span", { style: { flex: "1", minWidth: "8px" } }),
+        // Анонимный режим для показа на экране/проекторе: скрывает имена учеников.
+        checkbox("🕶 Скрыть имена", dash.filters.anon, function (v) {
+          dash.filters.anon = v; mount(shell(dashView())); buildNetwork();
+        }));
       body = h("div", {},
         toolbar,
         h("div", { id: "net", class: "net" }),
@@ -441,7 +447,7 @@
       var rows = sorted.map(function (s) {
         var m = per[String(s.id)];
         return h("tr", { class: "clickable", onClick: function () { go("/student/" + s.id); } },
-          h("td", {}, s.full_name),
+          h("td", {}, dispName(s.id, s.full_name)),
           h("td", {}, m ? (m.is_isolate ? isolateBadge() : communityPill(m.community)) : "—"),
           h("td", { class: "num" }, m ? m.in_degree : 0),
           h("td", { class: "num" }, m ? m.out_degree : 0),
@@ -468,13 +474,34 @@
     a.nodes.forEach(function (n) { if (dash.filters.community === "" || String(n.group) === String(dash.filters.community)) s.add(n.id); });
     return s;
   }
+  // Анонимный режим: стабильно заменяем имена на «Ученик N» (нумерация по id),
+  // чтобы граф и таблицу можно было показывать публично (на сцене), не
+  // раскрывая личности детей. Карта перестраивается при смене класса/состава.
+  function anonName(id) {
+    if (dash.anonMapFor !== dash.classId || !dash.anonMap ||
+        Object.keys(dash.anonMap).length !== dash.students.length) {
+      var m = {};
+      dash.students.slice().sort(function (a, b) { return (a.id || 0) - (b.id || 0); })
+        .forEach(function (s, i) { m[s.id] = "Ученик " + (i + 1); });
+      dash.anonMap = m; dash.anonMapFor = dash.classId;
+    }
+    return dash.anonMap[id] || "Ученик";
+  }
+  function dispName(id, real) { return dash.filters.anon ? anonName(id) : real; }
+
   function nodeStyle(n) {
     var base = PALETTE[n.group % PALETTE.length];
     var color = { background: base, border: base, highlight: { background: base, border: "#e8eefc" } };
     var bw = 2;
     if (dash.filters.isolate && n.isolate) { color = { background: "#fee2e2", border: "#ef4444", highlight: { background: "#fecaca", border: "#ef4444" } }; bw = 3; }
     var hidden = dash.filters.community !== "" && String(n.group) !== String(dash.filters.community);
-    return { id: n.id, label: n.label, title: n.title, size: n.size, color: color, borderWidth: bw, hidden: hidden };
+    var label = n.label, title = n.title;
+    if (dash.filters.anon) {
+      label = anonName(n.id);
+      var nl = String(n.title || "").indexOf("\n");   // первая строка title — имя; заменяем, метрики оставляем
+      title = label + (nl >= 0 ? String(n.title).slice(nl) : "");
+    }
+    return { id: n.id, label: label, title: title, size: n.size, color: color, borderWidth: bw, hidden: hidden };
   }
   function edgeStyle(e, visible) {
     var color = "#cbd5e1", width = 1, dashes = false;

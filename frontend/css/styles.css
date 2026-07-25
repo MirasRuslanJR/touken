@@ -374,3 +374,102 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; font-
   .code-card .nm { color: #444 !important; }
   .code-card .cd { color: #1d4ed8 !important; }
 }
+
+/* =====================================================================
+   Изолят — v4 «Крупно и понятно»: доступный максимализм поверх v3.
+   Всё крупнее, контрастнее, кнопки очевиднее, зоны нажатия больше —
+   чтобы даже пожилой пользователь сразу видел, куда нажимать.
+   Идёт последним в файле → переопределяет значения выше по каскаду.
+   ===================================================================== */
+:root {
+  --text-2: #c4cee4;                 /* ярче для контраста */
+  --text-3: #94a1c0;
+  --radius: 18px; --radius-sm: 13px; --radius-lg: 26px;
+  --ring: 0 0 0 4px rgba(59, 130, 246, 0.45);
+}
+
+/* Базовая типографика — крупнее и просторнее */
+body { font-size: 17px; line-height: 1.62; }
+h1 { font-size: 30px; }
+h2 { font-size: 23px; }
+h3 { font-size: 19px; }
+
+/* Видимая обводка при навигации с клавиатуры (доступность) */
+:focus-visible { outline: 3px solid var(--accent-2); outline-offset: 2px; }
+
+/* КНОПКИ — очевидно кликабельные, крупная зона нажатия, жирная обводка */
+.btn {
+  min-height: 50px; padding: 12px 22px; font-size: 16px; font-weight: 700;
+  border-width: 2px; border-radius: 14px; gap: 9px;
+}
+.btn-lg { min-height: 60px; padding: 16px 30px; font-size: 19px; border-radius: 16px; }
+.btn-sm { min-height: 42px; padding: 9px 16px; font-size: 14.5px; border-radius: 11px; }
+.btn-primary { box-shadow: var(--glow), 0 6px 16px -6px rgba(37, 99, 235, 0.9); }
+
+/* ПОЛЯ ВВОДА — крупнее; 16.5px, чтобы iOS не зумил при фокусе */
+input, select, textarea { font-size: 16.5px; }
+.input, .select, .textarea { padding: 13px 16px; border-width: 2px; border-radius: 13px; }
+.field label { font-size: 15px; }
+
+/* ФИЛЬТРЫ-ЧЕКБОКСЫ — крупная зона и крупная галочка */
+.check { font-size: 15.5px; padding: 10px 16px; gap: 10px; border-width: 2px; font-weight: 600; }
+.check input { width: 20px; height: 20px; }
+
+/* КАРТОЧКИ / СЕКЦИИ — больше воздуха */
+.card-pad { padding: 24px 26px; }
+.card-head { padding: 18px 24px; }
+.card-head h3 { font-size: 18px; }
+.section-title { font-size: 13px; }
+
+/* ПЛИТКИ МЕТРИК — крупные числа */
+.tile { padding: 18px 20px 18px 22px; }
+.tile .tile-label { font-size: 13px; }
+.tile .tile-value { font-size: 34px; }
+.tile .tile-sub { font-size: 13.5px; }
+.tile-hero .tile-value { font-size: 54px; }
+
+/* ТАБЛИЦА — крупнее и просторнее */
+.table { font-size: 16px; }
+.table th { font-size: 13px; padding: 14px 14px; }
+.table td { padding: 14px 14px; }
+
+/* БЕЙДЖИ / ПИЛЮЛИ — читаемее */
+.badge, .pill { font-size: 13.5px; padding: 6px 14px; }
+
+/* ВЕРХНЯЯ ПАНЕЛЬ — крупнее бренд/логотип */
+.topbar { padding: 14px 26px; }
+.brand { font-size: 21px; }
+.brand .logo { width: 40px; height: 40px; font-size: 20px; border-radius: 13px; }
+.topbar .who { font-size: 15px; max-width: 260px; }
+
+/* СПИСКИ */
+.list-item .when { font-size: 14px; }
+
+/* ОПРОС УЧЕНИКА — крупные «чипы» выбора (пальцем легко попасть) */
+.survey-hero h1 { font-size: 27px; }
+.q-title { font-size: 20px; }
+.q-hint { font-size: 14.5px; }
+.choice { font-size: 17px; padding: 13px 20px 13px 12px; border-width: 2px; }
+.choice .ini { width: 30px; height: 30px; font-size: 12.5px; }
+.survey-nav .btn { min-height: 54px; }
+
+/* Адаптив: на телефонах держим кнопки/чипы крупными (для касания),
+   но ужимаем отступы и числа, чтобы всё влезало без горизонтальной прокрутки. */
+@media (max-width: 560px) {
+  body { font-size: 16.5px; }
+  h1 { font-size: 24px !important; }
+  .btn { min-height: 50px; padding: 12px 18px; font-size: 16px; }
+  .btn-lg { min-height: 58px; padding: 15px 22px; font-size: 18px; }
+  .tile .tile-value { font-size: 28px; }
+  .tile-hero .tile-value { font-size: 40px; }
+  .table { font-size: 15px; }
+  .table th, .table td { padding: 11px 9px; }
+  .check { font-size: 15px; padding: 9px 14px; }
+  .choice { font-size: 16.5px; }
+  .card-pad { padding: 18px 16px; }
+}
+@media (max-width: 400px) {
+  .page { padding: 14px 11px; }
+  .btn { padding: 12px 14px; }
+  .tiles { gap: 10px; }
+}
