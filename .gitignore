@@ -5,8 +5,9 @@ __pycache__/
 venv/
 env/
 
-# Database (SQLite)
+# Локальная база (SQLite) — быстрый старт без своего PostgreSQL
 touken.db
+izolyat.db
 *.sqlite
 *.sqlite3
 
@@ -17,3 +18,6 @@ touken.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Выгруженные отчёты
+izolyat_*.xlsx

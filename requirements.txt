@@ -4,5 +4,13 @@ SQLAlchemy==2.0.31
 networkx==3.3
 pydantic==2.8.2
 python-dotenv==1.0.1
+# Миграции схемы. create_all не меняет уже существующие таблицы, поэтому на
+# живой базе схема управляется только через `alembic upgrade head`.
+alembic==1.13.2
+# Отчёты Excel и разбор импортируемых списков — на сервере. Раньше и то и
+# другое делала библиотека с CDN, и в школьной сети без cdnjs не работало.
+openpyxl==3.1.5
+# Загрузка файла (импорт списка учеников) — FastAPI требует для multipart.
+python-multipart==0.0.9
 # PostgreSQL driver for Supabase.
 psycopg2-binary==2.9.9

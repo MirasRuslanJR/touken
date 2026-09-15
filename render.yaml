@@ -6,15 +6,40 @@ services:
     name: izolyat
     runtime: python
     plan: free
-    buildCommand: pip install -r requirements.txt
+    # Миграции накатываются на этапе сборки, до старта воркеров: иначе
+    # приложение поднялось бы на старой схеме и упало на новых колонках.
+    buildCommand: pip install -r requirements.txt && alembic upgrade head
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
     envVars:
       # Python 3.12 — под него есть готовые колёса psycopg2 (под 3.13/3.14 может не собраться).
       - key: PYTHON_VERSION
         value: "3.12.7"
-      # Секрет для токенов входа сгенерируется автоматически.
+      # Секрет для подписи токенов входа сгенерируется автоматически.
       - key: SECRET_KEY
         generateValue: true
       # Строку подключения к Supabase впиши вручную в дашборде (секрет, не в коде).
       - key: DATABASE_URL
         sync: false
+      # Код приглашения на случай, если школы заводит оператор сервиса, а не
+      # сами пользователи. Если он задан, форма «Зарегистрировать школу»
+      # отключается и зарегистрироваться можно только по коду.
+      - key: REGISTRATION_INVITE_CODE
+        sync: false
+      # Origin'ы для CORS через запятую. Фронтенд отдаётся этим же сервисом, так
+      # что обычно не нужно — заполняй, только если кабинет открывают с другого хоста.
+      - key: ALLOWED_ORIGINS
+        sync: false
+
+# Ежесуточная чистка сырых ответов с истёкшим сроком хранения. На бесплатном
+# плане cron-задачи недоступны — тогда запускай `python -m app.retention --apply`
+# вручную или вынеси на любой внешний планировщик.
+#  - type: cron
+#    name: izolyat-retention
+#    runtime: python
+#    schedule: "0 3 * * *"
+#    buildCommand: pip install -r requirements.txt
+#    startCommand: python -m app.retention --apply
+#    envVars:
+#      - key: DATABASE_URL
+#        sync: false

@@ -4,12 +4,56 @@
 (function () {
   "use strict";
 
-  var PALETTE = ["#2563eb", "#0ea5e9", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#14b8a6", "#f43f5e", "#64748b", "#84cc16"];
+  // Цвета сообществ на социограмме. Подобраны приглушёнными и различимыми на
+  // светлом фоне: насыщенные «неоновые» оттенки на белом режут глаз и мешают
+  // читать подписи узлов. Порядок задаёт различимость соседних групп.
+  var PALETTE = [
+    "#3d6c9c", "#4a7c59", "#a8642f", "#2f7a77", "#8c5060",
+    "#5a6aa0", "#8a7230", "#43707e", "#7d5a3c", "#5d6b70",
+  ];
+  // Индекс связности — наша собственная свёртка взаимности, плотности и доли
+  // изолятов. Она не сверялась с внешними нормами, поэтому везде, где число
+  // показывается, рядом стоит эта оговорка: иначе оно читается как измеренная
+  // величина, а не как наш способ отсортировать классы по вниманию.
+  var WI_HINT = "Свёртка взаимности, плотности и доли изолятов. "
+    + "Внутренняя шкала 0-100, с внешними нормами не сверялась: "
+    + "годится, чтобы сравнивать классы между собой и с самими собой во времени.";
+  // Оформление графа. Держим в одном месте, чтобы легенда и узлы не разошлись.
+  var GRAPH = {
+    nodeBorder: "#9aa0a6",
+    nodeFill: "#ffffff",
+    label: "#16181b",
+    isolateFill: "#fef3f2", isolateBorder: "#b42318",
+    unknownFill: "#f1f2f4", unknownBorder: "#9aa0a6",
+    edge: "#c3c6ca",
+    mutual: "#1f5aa6",
+    bridge: "#a15c07",
+    highlight: "#eaf0f8",
+  };
   var QLABEL = { cinema: "Кино", project: "Проект", alone: "«Часто один»" };
+  // Виды и адресаты профилактических мероприятий. Списки закрытые: по ним
+  // психолог отчитывается перед завучем, свободный текст свёл бы сводку на нет.
+  var KINDS = [
+    ["training", "Тренинг / групповое занятие"],
+    ["class_hour", "Классный час"],
+    ["diagnostics", "Групповая диагностика"],
+    ["parents", "Работа с родителями"],
+    ["teachers", "Работа с педагогами"],
+    ["individual", "Индивидуальная беседа"],
+    ["other", "Другое"],
+  ];
+  var TARGETS = [
+    ["class", "Весь класс"],
+    ["group", "Группа учеников"],
+    ["student", "Один ученик"],
+    ["adults", "Родители / педагоги"],
+  ];
+  // Казахские формулировки — не украшение: в НИШ и региональных школах часть
+  // класса отвечает на казахском, а неточно понятый вопрос портит сами данные.
   var DEFAULT_QUESTIONS = [
-    { key: "cinema", text: "С кем бы ты пошёл в кино?", hint: "положительный выбор" },
-    { key: "project", text: "С кем хотел бы делать проект?", hint: "положительный выбор" },
-    { key: "alone", text: "Кто в классе часто остаётся один?", hint: "сигнал изоляции" },
+    { key: "cinema", text: "С кем бы ты пошёл в кино?", text_kk: "Киноға кіммен барар едің?", hint: "положительный выбор" },
+    { key: "project", text: "С кем хотел бы делать проект?", text_kk: "Жобаны кіммен бірге жасағың келеді?", hint: "положительный выбор" },
+    { key: "alone", text: "Кто в классе часто остаётся один?", text_kk: "Сыныпта кім жиі жалғыз қалады?", hint: "сигнал изоляции" },
   ];
 
   /* ---------------------------------------------------------- DOM helpers */
@@ -55,6 +99,17 @@
     if (isNaN(d.getTime())) return iso;
     return d.toLocaleDateString("ru-RU", { day: "2-digit", month: "short", year: "numeric" });
   }
+  // В журнале доступа важен не только день, но и время: вопрос проверки
+  // звучит как «кто открывал карточку 14 сентября около двух часов».
+  function fmtDateTime(iso) {
+    if (!iso) return "—";
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleString("ru-RU", {
+      day: "2-digit", month: "2-digit", year: "2-digit",
+      hour: "2-digit", minute: "2-digit",
+    });
+  }
   function fmtShort(iso) {
     var d = new Date((iso || "").slice(0, 10) + "T00:00:00");
     return isNaN(d.getTime()) ? iso : d.toLocaleDateString("ru-RU", { day: "2-digit", month: "short" });
@@ -78,6 +133,18 @@
     if (Array.isArray(d)) return d.map(function (x) { return x.msg || JSON.stringify(x); }).join("; ");
     return "Ошибка " + status;
   }
+  // На этих адресах 401 означает «неверные логин или пароль», а не «сессия
+  // истекла»: сбрасывать токен и уводить на экран входа здесь нельзя — иначе
+  // форма перерисовывается заново и стирает сообщение об ошибке вместе с
+  // введённым e-mail. Пользователь видит только моргание и не понимает, что
+  // именно не так.
+  function isAuthEndpoint(url) {
+    return url.indexOf("/api/auth/login") === 0
+      || url.indexOf("/api/auth/register") === 0
+      || url.indexOf("/api/auth/schools") === 0
+      || url.indexOf("/api/auth/password") === 0;
+  }
+
   function api(method, url, body) {
     var headers = { "Content-Type": "application/json" };
     var t = localStorage.getItem("izolyat.token");
@@ -86,10 +153,25 @@
     if (body !== undefined) opt.body = JSON.stringify(body);
     return fetch(url, opt).then(function (res) {
       return res.json().catch(function () { return null; }).then(function (data) {
-        if (res.status === 401) { localStorage.removeItem("izolyat.token"); state.user = null; }
+        if (res.status === 401 && !isAuthEndpoint(url)) {
+          var hadSession = !!state.user;
+          localStorage.removeItem("izolyat.token");
+          state.user = null;
+          state.unseen = 0;
+          // Сессия истекла или была завершена с другого устройства. Уводим на
+          // вход, иначе пользователь видит «Сессия недействительна» на пустом
+          // экране. При загрузке страницы (сессии ещё не было) не дёргаем
+          // роутер: он и так отрисует экран входа сам.
+          if (hadSession) setTimeout(function () { go("/"); }, 0);
+        }
         if (!res.ok) throw new Error(errMsg(data, res.status));
         return data;
       });
+    }, function () {
+      // fetch отклоняется только при сетевой ошибке: сервер не поднят, нет
+      // интернета, оборвалось соединение. Браузерное «Failed to fetch»
+      // пользователю ничего не говорит.
+      throw new Error("Нет связи с сервером. Проверьте подключение и повторите.");
     });
   }
   var API = {
@@ -106,10 +188,59 @@
     return h("div", { class: "empty" }, h("div", { class: "big" }, title), hint ? h("div", { class: "muted" }, hint) : null, action ? h("div", { style: { marginTop: "16px" } }, action) : null);
   }
   function field(label, control) { return h("div", { class: "field" }, h("label", {}, label), control); }
+
+  // Кнопка, которая блокируется на время запроса. При медленной сети двойной
+  // клик по «Сохранить» создавал два класса / два мероприятия / два согласия:
+  // модалка закрывается только по ответу сервера, а до него кнопка была живой.
+  // Обработчик должен вернуть Promise — иначе кнопка просто сработает как есть.
+  function asyncBtn(props, label) {
+    var busy = false;
+    var handler = props.onClick;
+    var btn = h("button", Object.assign({}, props, {
+      onClick: function () {
+        if (busy) return;
+        var result = handler();
+        if (!result || typeof result.then !== "function") return;
+        busy = true;
+        btn.disabled = true;
+        var original = btn.textContent;
+        btn.textContent = "…";
+        result.then(null, function () {}).then(function () {
+          busy = false;
+          btn.disabled = false;
+          btn.textContent = original;
+        });
+      },
+    }), label);
+    return btn;
+  }
   function tile(label, value, sub) {
     return h("div", { class: "tile" }, h("div", { class: "tile-label" }, label), h("div", { class: "tile-value" }, value), sub != null ? h("div", { class: "tile-sub" }, sub) : null);
   }
   function isolateBadge() { return h("span", { class: "badge badge-red" }, h("span", { class: "dot" }), "Изолят"); }
+  // «Нет данных» — не мягкая форма «изолята», а отказ ставить статус: ответило
+  // слишком мало класса, и отсутствие входящих выборов ничего не доказывает.
+  function unknownBadge() {
+    return h("span", { class: "pill", title: "Опрос прошло меньше 70% класса, судить об изоляции нельзя" },
+      "нет данных");
+  }
+  function statusPill(status) {
+    if (status === "isolate") return isolateBadge();
+    if (status === "unknown") return unknownBadge();
+    return h("span", { class: "pill badge-green" }, "есть связи");
+  }
+  // Одна-две номинации «часто остаётся один» — мнение одного-двух детей, а не
+  // сигнал класса. Точное число ниже порога не показываем, чтобы психолог не
+  // вешал на ребёнка ярлык с чужих слов (порог см. analytics.ALONE_MIN_REPORT).
+  function aloneText(votes, reportable) {
+    if (!votes) return 0;
+    return reportable ? votes : "<3";
+  }
+  function lowDataPill(participation) {
+    var pct = participation != null ? Math.round(participation * 100) : 0;
+    return h("span", { class: "pill", style: { color: "var(--amber)", borderColor: "var(--amber)" },
+      title: "Метрики среза считаются по ответившим и могут быть неполными" }, "явка " + pct + "%");
+  }
   function communityPill(g) {
     var c = PALETTE[g % PALETTE.length];
     return h("span", { class: "pill", style: { color: c } }, h("span", { class: "swatch", style: { width: "9px", height: "9px", borderRadius: "50%", background: c } }), "Группа " + (g + 1));
@@ -117,7 +248,7 @@
   function stars(v) {
     if (v == null) return h("span", { class: "muted" }, "—");
     var f = Math.max(0, Math.min(5, v));
-    return h("span", { class: "stars" }, "★".repeat(f), h("span", { class: "dim" }, "★".repeat(5 - f)));
+    return h("span", { class: "stars" }, f + " из 5");
   }
   function deltaSpan(v) {
     var cls = v > 0 ? "delta-up" : v < 0 ? "delta-down" : "delta-flat";
@@ -127,10 +258,18 @@
 
   function openModal(title, bodyNodes, footerNodes, wide) {
     var backdrop = h("div", { class: "modal-backdrop" });
-    function close() { backdrop.remove(); window.removeEventListener("keydown", onKey); }
+    // Класс на body нужен для двух вещей: не прокручивать страницу под окном
+    // и печатать только содержимое окна. Печать вызывается из окна с кодами
+    // и из окна отчёта, и без этого на бумагу уходил ещё и экран за ними.
+    document.body.classList.add("modal-open");
+    function close() {
+      backdrop.remove();
+      window.removeEventListener("keydown", onKey);
+      if (!document.querySelector(".modal-backdrop")) document.body.classList.remove("modal-open");
+    }
     function onKey(e) { if (e.key === "Escape") close(); }
     var modal = h("div", { class: "modal" + (wide ? " wide" : "") },
-      h("div", { class: "modal-head no-print" }, h("h3", {}, title), h("button", { class: "btn btn-ghost btn-sm", onClick: close }, "✕")),
+      h("div", { class: "modal-head no-print" }, h("h3", {}, title), h("button", { class: "btn btn-ghost btn-sm", onClick: close, title: "Закрыть" }, "\u00d7")),
       h("div", { class: "modal-body" }, bodyNodes),
       footerNodes ? h("div", { class: "modal-foot no-print" }, footerNodes) : null);
     backdrop.appendChild(modal);
@@ -141,10 +280,20 @@
   }
 
   /* ---------------------------------------------------------- app state */
-  var state = { user: null };
+  var state = { user: null, unseen: 0 };
+
+  function role() { return (state.user && state.user.role) || "psychologist"; }
+  function canCasework() { return role() === "psychologist" || role() === "admin"; }
+  function canSchool() { return role() === "head" || role() === "admin"; }
+  function isAdmin() { return role() === "admin"; }
   var dash = {
     classes: null, classId: null, cls: null, students: [], surveys: [],
     surveyId: null, analysis: null, prevAnalysis: null, loaded: false,
+    // Кэш аналитики по срезам. Переключение Time Slider данные не меняет, а
+    // каждый запрос заново строит граф и считает betweenness O(V·E) — без кэша
+    // протаскивание слайдера по 8 срезам давало ~24 запроса и столько же
+    // полных пересчётов. Сбрасывается при любом изменении данных.
+    cache: {}, keepCache: false, consent: null,
     filters: { isolate: true, bridge: true, mutual: true, community: "", anon: false },
     network: null, nodesDS: null, edgesDS: null,
     anonMap: null, anonMapFor: null,
@@ -156,67 +305,212 @@
   }
   function go(path) { if (location.hash === "#" + path) router(); else location.hash = "#" + path; }
 
+  var ROLE_LABEL = { psychologist: "Психолог", head: "Завуч", admin: "Психолог · администратор" };
+
+  // Раздел считается активным не только на своём точном адресе: страница
+  // класса и карточка ученика относятся к «Классам», иначе при переходе внутрь
+  // подсветка пропадала и казалось, что меню не работает.
+  var NAV_SECTIONS = {
+    "/": ["/", "/class", "/student"],
+    "/alerts": ["/alerts"],
+    "/prevention": ["/prevention"],
+    "/school": ["/school"],
+    "/staff": ["/staff"],
+    "/audit": ["/audit"],
+  };
+
+  function navLink(path, label, badge) {
+    var current = location.hash.slice(1) || "/";
+    var section = current === "/" ? "/" : "/" + current.split("/").filter(Boolean)[0];
+    var active = (NAV_SECTIONS[path] || [path]).indexOf(section) >= 0;
+    return h("a", { class: "navlink" + (active ? " on" : ""), href: "#" + path },
+      label,
+      badge ? h("span", { class: "navbadge" }, badge > 99 ? "99+" : String(badge)) : null);
+  }
+
   function shell(content) {
     var frag = document.createDocumentFragment();
+    var nav = [];
+    if (canCasework()) {
+      nav.push(navLink("/", "Классы"));
+      nav.push(navLink("/alerts", "Входящие", state.unseen));
+      nav.push(navLink("/prevention", "Профилактика"));
+    }
+    if (canSchool()) nav.push(navLink("/school", "Школа"));
+    if (isAdmin()) nav.push(navLink("/staff", "Сотрудники"));
+    if (isAdmin()) nav.push(navLink("/audit", "Журнал"));
+
+    // Правая часть — одной группой, а не отдельными элементами с распоркой.
+    // С распоркой (flex: 1, база 0) всё сжатие доставалось меню: оно
+    // схлопывалось в узкую полоску, пока почта и кнопки держали полный размер.
+    // Группа с margin-left:auto прижимается вправо и корректно переносится.
     frag.appendChild(h("header", { class: "topbar" },
       h("a", { class: "brand", href: "#/" }, h("span", { class: "logo" }, "И"), "Изолят"),
-      h("span", { class: "pill hide-sm" }, "🔒 Только психолог"),
-      h("span", { class: "spacer" }),
-      state.user ? h("span", { class: "who hide-sm" }, state.user.email) : null,
-      h("button", { class: "btn btn-sm", onClick: logout }, "Выйти")));
+      h("nav", { class: "topnav" }, nav),
+      h("div", { class: "topbar-actions" },
+        state.user ? h("span", { class: "who hide-sm", title: ROLE_LABEL[role()] || "" },
+          state.user.email,
+          state.user.school_name ? h("span", { class: "muted tiny" }, " · " + state.user.school_name) : null) : null,
+        h("button", { class: "btn btn-sm", onClick: accountModal }, "Аккаунт"),
+        h("button", { class: "btn btn-sm", onClick: logout }, "Выйти"))));
     frag.appendChild(h("main", { class: "page" }, content));
+    // Правовые документы должны быть доступны с любого экрана, а не только со
+    // страницы входа: школа обязана показать их родителю по первому запросу.
+    frag.appendChild(h("footer", { class: "sitefoot no-print" },
+      h("span", {}, "Изолят"),
+      h("a", { href: "/privacy.html", target: "_blank", rel: "noopener" }, "Политика обработки данных"),
+      h("a", { href: "/terms.html", target: "_blank", rel: "noopener" }, "Условия использования")));
     return frag;
   }
+
+  // Значок непрочитанных оповещений обновляем в фоне: он должен быть виден на
+  // любом экране, иначе смысл серверных алертов теряется.
+  function refreshUnseen() {
+    if (!canCasework()) return Promise.resolve();
+    return API.get("/api/alerts/count")
+      .then(function (d) { state.unseen = d.unseen || 0; })
+      .catch(function () {});
+  }
   function logout() {
-    localStorage.removeItem("izolyat.token");
-    state.user = null; dash.classes = null; dash.classId = null; dash.surveyId = null; dash.analysis = null; dash.loaded = false;
-    stopNetwork(); go("/");
+    // Сначала гасим токен на сервере (инкремент token_version), только потом
+    // чистим локально: иначе токен из этого браузера оставался бы валидным ещё
+    // 7 дней — а это школьный компьютер, за которым психолог не один.
+    // Если запрос не прошёл, из интерфейса всё равно выходим.
+    function done() {
+      localStorage.removeItem("izolyat.token");
+      state.user = null; dash.classes = null; dash.classId = null; dash.surveyId = null;
+      dash.analysis = null; dash.cache = {}; dash.loaded = false;
+      stopNetwork(); go("/");
+    }
+    if (localStorage.getItem("izolyat.token")) API.post("/api/auth/logout").then(done, done);
+    else done();
   }
 
   /* ============================================================== LOGIN */
+  // Первый шаг для новой школы: завести саму школу и получить код приглашения.
+  // Тот, кто регистрируется по нему первым, становится администратором и ведёт
+  // свои классы как обычный психолог.
+  function schoolModal(onDone) {
+    var nameIn = h("input", { class: "input", placeholder: "Например: НИШ ЕМН г. Уральск" });
+    var cityIn = h("input", { class: "input", placeholder: "Город" });
+    var msg = h("div");
+    var close;
+    function save() {
+      if (nameIn.value.trim().length < 2) { msg.replaceChildren(alertBox("error", "Укажите название школы")); return; }
+      return API.post("/api/auth/schools", { name: nameIn.value.trim(), city: cityIn.value.trim() })
+        .then(function (d) { close(); onDone(d.school); })
+        .catch(function (e) { msg.replaceChildren(alertBox("error", e.message)); });
+    }
+    close = openModal("Регистрация школы",
+      [h("p", { class: "muted tiny", style: { marginBottom: "10px" } },
+        "Школа получит код приглашения. По нему регистрируются психологи и завуч. "
+        + "Без кода доступ к данным учеников получить нельзя."),
+       msg, field("Название школы", nameIn), field("Город", cityIn)],
+      [h("button", { class: "btn", onClick: function () { close(); } }, "Отмена"),
+       asyncBtn({ class: "btn btn-primary", onClick: save }, "Создать школу")]);
+  }
+
   function renderLogin() {
     stopNetwork();
     var mode = "in";
     var emailIn = h("input", { class: "input", type: "email", placeholder: "you@example.com" });
-    var passIn = h("input", { class: "input", type: "password", placeholder: "••••••••" });
+    var passIn = h("input", { class: "input", type: "password", placeholder: "минимум 8 символов" });
     var nameIn = h("input", { class: "input", placeholder: "Как к вам обращаться" });
     var nameField = field("Имя", nameIn);
+    // Код приглашения выдаёт школа. Регистрация открывает доступ к персональным
+    // данным несовершеннолетних, поэтому свободной она быть не может.
+    var inviteIn = h("input", { class: "input", placeholder: "Код от вашей школы" });
+    var inviteField = field("Код приглашения", inviteIn);
     var msg = h("div");
     var submit = h("button", { class: "btn btn-primary", type: "submit" }, "Войти");
     var toggle = h("a", { href: "#" });
+    var schoolLink = h("a", { href: "#" }, "Зарегистрировать школу");
+
     function setMode(m) {
-      mode = m; nameField.style.display = m === "up" ? "" : "none";
+      mode = m;
+      nameField.style.display = m === "up" ? "" : "none";
+      inviteField.style.display = m === "up" ? "" : "none";
       submit.textContent = m === "in" ? "Войти" : "Создать аккаунт";
-      toggle.textContent = m === "in" ? "Зарегистрироваться" : "Войти"; msg.replaceChildren();
+      toggle.textContent = m === "in" ? "Зарегистрироваться" : "Войти";
+      schoolLink.style.display = m === "up" ? "" : "none";
+      msg.replaceChildren();
     }
     toggle.addEventListener("click", function (e) { e.preventDefault(); setMode(mode === "in" ? "up" : "in"); });
+    schoolLink.addEventListener("click", function (e) {
+      e.preventDefault();
+      schoolModal(function (school) {
+        inviteIn.value = school.invite_code;
+        msg.replaceChildren(alertBox("info",
+          "Школа «" + school.name + "» создана. Код приглашения: " + school.invite_code
+          + ". Сохраните его: по нему регистрируются остальные сотрудники."));
+      });
+    });
+
     var form = h("form", { class: "card-pad stack", style: { paddingTop: "0" } },
-      nameField, field("E-mail", emailIn), field("Пароль", passIn), msg, submit,
-      h("div", { class: "tiny muted", style: { textAlign: "center" } }, h("span", {}, "Нет аккаунта? "), toggle));
+      nameField, field("E-mail", emailIn), field("Пароль", passIn), inviteField, msg, submit,
+      h("div", { class: "tiny muted", style: { textAlign: "center" } }, h("span", {}, "Нет аккаунта? "), toggle),
+      h("div", { class: "tiny muted", style: { textAlign: "center" } }, schoolLink));
     form.addEventListener("submit", function (e) {
       e.preventDefault(); msg.replaceChildren(); submit.disabled = true;
       var email = emailIn.value.trim(), password = passIn.value;
+      if (mode === "up" && password.length < 8) {
+        msg.replaceChildren(alertBox("error", "Пароль — минимум 8 символов"));
+        submit.disabled = false;
+        return;
+      }
       var p = mode === "in" ? API.post("/api/auth/login", { email: email, password: password })
-        : API.post("/api/auth/register", { email: email, password: password, full_name: nameIn.value.trim() });
-      p.then(function (d) { localStorage.setItem("izolyat.token", d.token); state.user = d.user; dash.classes = null; dash.loaded = false; go("/"); })
+        : API.post("/api/auth/register", { email: email, password: password, full_name: nameIn.value.trim(), invite_code: inviteIn.value.trim() });
+      p.then(function (d) {
+        localStorage.setItem("izolyat.token", d.token);
+        state.user = d.user; dash.classes = null; dash.loaded = false;
+        return refreshUnseen().then(function () { go("/"); });
+      })
         .catch(function (err) { msg.replaceChildren(alertBox("error", err.message)); submit.disabled = false; });
     });
     setMode("in");
-    mount(h("div", { class: "center" },
-      h("div", { class: "card", style: { width: "380px", maxWidth: "92vw" } },
-        h("div", { class: "card-pad", style: { textAlign: "center", paddingTop: "28px" } },
-          h("div", { class: "logo", style: { width: "46px", height: "46px", fontSize: "22px", margin: "0 auto 12px" } }, "И"),
-          h("h2", { style: { fontSize: "20px" } }, "Изолят"),
-          h("p", { class: "muted", style: { marginTop: "4px" } }, "Раннее выявление социальной изоляции")),
-        form)));
+    // Подпись под названием говорит, что это за программа и для кого, без
+    // обещаний и общих слов: её читает школьный психолог, а не покупатель.
+    mount(h("div", {},
+      h("div", { class: "center" },
+        h("div", { class: "card", style: { width: "380px", maxWidth: "92vw" } },
+          h("div", { class: "card-pad", style: { textAlign: "center", paddingTop: "26px" } },
+            h("div", { class: "logo", style: { width: "40px", height: "40px", fontSize: "18px", margin: "0 auto 12px" } }, "И"),
+            h("h2", { style: { fontSize: "19px" } }, "Изолят"),
+            h("p", { class: "muted tiny", style: { marginTop: "4px" } },
+              "Социометрия класса для школьного психолога")),
+          form)),
+      h("footer", { class: "sitefoot" },
+        h("a", { href: "/privacy.html" }, "Политика обработки данных"),
+        h("a", { href: "/terms.html" }, "Условия использования"))));
   }
 
   /* ========================================================== DASHBOARD */
-  function setClass(cid) { dash.classId = cid; dash.surveyId = null; dash.analysis = null; dash.filters.community = ""; renderDashboard(); }
-  function setSurvey(sid) { dash.surveyId = sid; dash.analysis = null; dash.filters.community = ""; renderDashboard(); }
+  function setClass(cid) {
+    if (dash.classId !== cid) { dash.surveyId = null; dash.analysis = null; dash.filters.community = ""; }
+    dash.classId = cid;
+    renderDashboard();
+  }
+  function setSurvey(sid) {
+    dash.surveyId = sid; dash.analysis = null; dash.filters.community = "";
+    dash.keepCache = true;  // переключение среза ничего не меняет — кэш валиден
+    renderDashboard();
+  }
+
+  // Аналитика конкретного среза при неизменных данных всегда одна и та же.
+  function loadAnalysis(surveyId) {
+    if (dash.cache[surveyId]) return Promise.resolve(dash.cache[surveyId]);
+    return API.get("/api/surveys/" + surveyId + "/analytics").then(function (d) {
+      dash.cache[surveyId] = d;
+      return d;
+    });
+  }
 
   function renderDashboard() {
     stopNetwork();
+    // Любой путь, кроме переключения среза (создание/удаление/правка, смена
+    // класса, первая загрузка), мог изменить данные — кэш сбрасываем.
+    if (!dash.keepCache) dash.cache = {};
+    dash.keepCache = false;
     if (!dash.loaded) mount(shell(spinner()));
     Promise.resolve()
       .then(function () { if (dash.classes === null) return API.get("/api/classes").then(function (d) { dash.classes = d.classes; }); })
@@ -231,9 +525,10 @@
       })
       .then(function (data) {
         dash.cls = data.class; dash.students = data.students; dash.surveys = data.surveys;
+        dash.consent = data.consent;
         if (!dash.surveyId || !dash.surveys.some(function (s) { return s.id === dash.surveyId; }))
           dash.surveyId = dash.surveys.length ? dash.surveys[dash.surveys.length - 1].id : null;
-        if (dash.surveyId) return API.get("/api/surveys/" + dash.surveyId + "/analytics");
+        if (dash.surveyId) return loadAnalysis(dash.surveyId);
         return null;
       })
       .then(function (analysis) {
@@ -241,7 +536,7 @@
         // Подтягиваем предыдущий срез, чтобы показать резкое падение связей.
         var idx = dash.surveys.findIndex(function (s) { return s.id === dash.surveyId; });
         if (analysis && idx > 0) {
-          return API.get("/api/surveys/" + dash.surveys[idx - 1].id + "/analytics")
+          return loadAnalysis(dash.surveys[idx - 1].id)
             .then(function (prev) { dash.prevAnalysis = prev; })
             .catch(function () { dash.prevAnalysis = null; });
         }
@@ -258,31 +553,60 @@
   function dashEmpty() {
     return h("div", {}, dashHeader(),
       h("div", { class: "card card-pad" }, emptyState("Ещё нет ни одного класса",
-        "Создайте класс, добавьте учеников, затем срез — ученики пройдут опрос по QR/коду, и граф построится автоматически. Для демо: python -m app.seed",
+        "Создайте класс, добавьте учеников, затем срез. Ученики пройдут опрос по коду, и граф построится автоматически. Для демо: python -m app.seed",
         h("button", { class: "btn btn-primary", onClick: function () { classModal(null); } }, "Создать класс"))));
   }
 
   function dashHeader() {
-    var sel = h("select", { class: "select", style: { width: "auto", minWidth: "200px" }, onChange: function (e) { setClass(Number(e.target.value)); } });
+    var sel = h("select", { class: "select", style: { width: "auto", minWidth: "200px" },
+      onChange: function (e) { go("/class/" + e.target.value); } });
     (dash.classes || []).forEach(function (c) { sel.appendChild(h("option", { value: c.id }, c.name)); });
     if (dash.classId) sel.value = String(dash.classId);
     var controls = [sel];
     if (dash.classId) {
-      controls.push(h("button", { class: "btn btn-sm", title: "Изменить класс", onClick: function () { classModal(dash.cls); } }, "✎"));
+      controls.push(h("button", { class: "btn btn-sm", onClick: function () { classModal(dash.cls); } }, "Настройки класса"));
       controls.push(h("button", { class: "btn btn-sm", onClick: manageStudentsModal }, "Ученики"));
+      controls.push(h("button", { class: "btn btn-sm", onClick: function () { preventionModal(dash.classId); } }, "Профилактика"));
     }
     controls.push(h("button", { class: "btn btn-sm btn-primary", onClick: function () { classModal(null); } }, "+ Класс"));
     return h("div", { style: { marginBottom: "18px" } },
-      h("div", { class: "section-title", style: { marginBottom: "4px" } }, "Класс"),
+      h("div", { class: "breadcrumb" }, h("a", { href: "#/" }, "Мои классы"), h("span", {}, "/"),
+        h("span", {}, dash.cls ? dash.cls.name : "Класс")),
       h("div", { style: { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" } }, controls));
+  }
+
+  // Ученики без отметки о согласии не участвуют в срезах — психолог должен
+  // увидеть это до того, как удивится неполной явке.
+  function consentBanner() {
+    var missing = (dash.consent && dash.consent.missing) || [];
+    if (!missing.length) return null;
+    return h("div", { style: { marginBottom: "18px" } }, alertBox("info",
+      h("span", {}, "Не участвуют в срезах, нет отметки о согласии на обработку данных: ",
+        h("b", {}, missing.map(function (m) { return m.full_name; }).join(", ")), ". ",
+        h("a", { href: "#", onClick: function (e) { e.preventDefault(); manageStudentsModal(); } }, "Отметить согласие"))));
   }
 
   function currentSurvey() { return dash.surveys.filter(function (s) { return s.id === dash.surveyId; })[0] || null; }
 
   function dashView() {
     var sv = currentSurvey();
-    return h("div", {}, dashHeader(), srezPanel(sv), dropBanner(), radarCard(),
+    return h("div", {}, dashHeader(), consentBanner(), srezPanel(sv), reliabilityBanner(), dropBanner(), radarCard(),
       h("div", { class: "dash-grid" }, graphCard(sv), h("div", { class: "stack" }, metricsCard(), rosterCard())));
+  }
+
+  // Явка ниже порога означает, что «нет входящих выборов» может быть следствием
+  // неявки друзей, а не изоляции. Психолог должен видеть это до того, как
+  // сделает вывод о ребёнке, — поэтому баннер стоит над графом и метриками.
+  function reliabilityBanner() {
+    var a = dash.analysis;
+    if (!a || a.graph_metrics.reliability !== "low") return null;
+    var m = a.graph_metrics;
+    if (!m.responded) return null;  // «совсем нет ответов» подсвечивается на самом графе
+    var pct = Math.round((m.participation || 0) * 100);
+    return h("div", { style: { marginBottom: "18px" } }, alertBox("info",
+      "Опрос прошли " + m.responded + " из " + m.students + " (" + pct + "%). Пока ответило меньше 70% класса, "
+      + "статус «изолят» не ставится, индекс не считается, а оповещения о падении связей отключены: "
+      + "по такой явке нельзя отличить изоляцию от того, что ученика просто некому было выбрать."));
   }
 
   // Явный алерт о резком падении входящих связей ученика по сравнению с
@@ -290,11 +614,18 @@
   function dropBanner() {
     var a = dash.analysis, prev = dash.prevAnalysis;
     if (!a || !prev) return null;
+    // Сравнивать срезы с разной (и низкой) явкой бессмысленно: «падение связей»
+    // тогда означает лишь то, что во втором срезе ответило меньше детей. Такой
+    // алерт отправил бы психолога работать с ребёнком без проблемы.
+    if (a.graph_metrics.reliability === "low" || prev.graph_metrics.reliability === "low") return null;
     var perNow = a.per_student, perPrev = prev.per_student;
     var drops = [];
     dash.students.forEach(function (s) {
       var mNow = perNow[String(s.id)], mPrev = perPrev[String(s.id)];
       if (!mNow || !mPrev) return;
+      // Ученик, не прошедший один из срезов, мог «потерять» исходящие связи
+      // просто из-за неявки — падение входящих у него не интерпретируем.
+      if (mNow.status === "unknown" || mPrev.status === "unknown") return;
       var x = mPrev.in_degree, y = mNow.in_degree;
       var sharp = (x - y >= 2) || (x >= 2 && y <= x / 2); // на 2+ или вдвое
       if (y < x && sharp) drops.push({ name: s.full_name, id: s.id, from: x, to: y });
@@ -303,21 +634,21 @@
     drops.sort(function (p, q) { return (p.to - p.from) - (q.to - q.from); }); // сильнее падение — выше
     var items = drops.map(function (d) {
       return h("div", { class: "dp-item" },
-        h("span", {}, "⚠"),
+        null,
         h("span", { style: { flex: "1" } }, h("b", {}, d.name), " — упало с " + d.from + " до " + d.to + " входящих связей с прошлого среза"),
         h("button", { class: "btn btn-sm", onClick: function () { go("/student/" + d.id); } }, "Карточка"));
     });
     return h("div", { class: "dropbar" }, h("div", { class: "card-pad" },
       h("div", { style: { fontWeight: "700", marginBottom: "8px", color: "var(--red)" } },
-        "⚠ Резкое падение связей: " + drops.length + " — относительно среза «" + prev.survey.title + "»"),
+        "Резкое падение связей: " + drops.length + " — относительно среза «" + prev.survey.title + "»"),
       items));
   }
 
   function srezPanel(sv) {
     var controls = [];
     controls.push(h("button", { class: "btn btn-sm", disabled: dash.students.length < 2, title: dash.students.length < 2 ? "Добавьте минимум двух учеников" : "", onClick: surveyModal }, "+ Срез"));
-    if (sv) controls.push(h("button", { class: "btn btn-sm btn-primary", onClick: function () { codesModal(sv); } }, "🔗 Ссылка и QR"));
-    if (dash.surveys.length >= 2) controls.push(h("button", { class: "btn btn-sm", onClick: compareModal }, "⇄ Сравнить срезы"));
+    if (sv) controls.push(h("button", { class: "btn btn-sm btn-primary", onClick: function () { codesModal(sv); } }, "Ссылка и коды"));
+    if (dash.surveys.length >= 2) controls.push(h("button", { class: "btn btn-sm", onClick: compareModal }, "Сравнить срезы"));
 
     var inner = [h("div", { style: { display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" } },
       h("div", { class: "section-title", style: { margin: 0, flex: 1 } }, "Срез (социометрический снимок)"), controls)];
@@ -327,13 +658,32 @@
     } else {
       var idx = Math.max(0, dash.surveys.findIndex(function (s) { return s.id === dash.surveyId; }));
       var slider = h("input", { class: "slider", type: "range", min: "0", max: String(dash.surveys.length - 1), value: String(idx),
-        oninput: function (e) { var s = dash.surveys[Number(e.target.value)]; if (s) setSurvey(s.id); } });
+        // change, а не input: перерисовка идёт по отпусканию ползунка, а не на
+        // каждый промежуточный срез при перетаскивании.
+        onchange: function (e) { var s = dash.surveys[Number(e.target.value)]; if (s) setSurvey(s.id); } });
       var ticks = h("div", { class: "slider-ticks" }, dash.surveys.map(function (s) { return h("span", {}, fmtShort(s.conducted_on)); }));
       var responded = dash.analysis ? (dash.analysis.responded_ids || []).length : 0;
       var total = dash.students.length;
       var pct = total ? Math.round(responded / total * 100) : 0;
+      // Закрытие среза — момент, когда сервер считает итог и создаёт
+      // оповещения. Психолог должен сразу увидеть, что они появились.
       var openBtn = sv ? h("button", { class: "btn btn-sm " + (sv.is_open ? "" : "btn-primary"),
-        onClick: function () { API.put("/api/surveys/" + sv.id, { is_open: !sv.is_open }).then(function () { renderDashboard(); }); } },
+        onClick: function () {
+          if (sv.is_open && !confirm("Закрыть опрос «" + sv.title + "»?\n\nРезультат будет зафиксирован, и система проверит, у кого ухудшились связи."))
+            return;
+          API.put("/api/surveys/" + sv.id, { is_open: !sv.is_open }).then(function (d) {
+            dash.cache = {};
+            return refreshUnseen().then(function () {
+              renderDashboard();
+              if (d.alerts_created) {
+                setTimeout(function () {
+                  if (confirm("Срез закрыт. Новых оповещений: " + d.alerts_created + ".\n\nОткрыть «Входящие»?"))
+                    go("/alerts");
+                }, 80);
+              }
+            });
+          });
+        } },
         sv.is_open ? "Закрыть опрос" : "Открыть опрос") : null;
       var delBtn = sv ? h("button", { class: "btn btn-sm btn-danger", onClick: function () {
         if (confirm("Удалить срез вместе со всеми ответами?")) API.del("/api/surveys/" + sv.id).then(function () { dash.surveyId = null; renderDashboard(); }); } }, "Удалить срез") : null;
@@ -365,7 +715,7 @@
         communitySelect(a),
         h("span", { style: { flex: "1", minWidth: "8px" } }),
         // Анонимный режим для показа на экране/проекторе: скрывает имена учеников.
-        checkbox("🕶 Скрыть имена", dash.filters.anon, function (v) {
+        checkbox("Скрыть имена", dash.filters.anon, function (v) {
           dash.filters.anon = v; mount(shell(dashView())); buildNetwork();
         }));
       body = h("div", {},
@@ -373,7 +723,7 @@
         h("div", { id: "net", class: "net" }),
         graphLegend(a),
         (a.responded_ids || []).length === 0 ? h("div", { style: { marginTop: "12px" } },
-          alertBox("info", "Ученики ещё не прошли опрос — связей нет. Откройте опрос и раздайте коды/QR.")) : null);
+          alertBox("info", "Ученики ещё не прошли опрос, связей нет. Откройте опрос и раздайте коды.")) : null);
     }
     return h("div", { class: "card" },
       h("div", { class: "card-head" }, h("h3", {}, "Социограмма"), h("span", { class: "spacer" }),
@@ -400,9 +750,12 @@
     var items = [];
     var count = Math.min((a.communities || []).length, PALETTE.length);
     for (var i = 0; i < count; i++) items.push(h("span", { class: "item" }, h("span", { class: "swatch", style: { background: PALETTE[i % PALETTE.length] } }), "Группа " + (i + 1)));
-    items.push(h("span", { class: "item" }, h("span", { class: "swatch", style: { background: "#fee2e2", border: "2px solid #ef4444" } }), "Изолят"));
-    items.push(h("span", { class: "item" }, h("span", { class: "line", style: { borderTopColor: "#2563eb" } }), "Взаимный выбор"));
-    items.push(h("span", { class: "item" }, h("span", { class: "line", style: { borderTopColor: "#f59e0b", borderTopStyle: "dashed" } }), "Мост"));
+    items.push(h("span", { class: "item" }, h("span", { class: "swatch", style: { background: GRAPH.isolateFill, border: "2px solid " + GRAPH.isolateBorder } }), "Изолят"));
+    if (a.graph_metrics && a.graph_metrics.unknown)
+      items.push(h("span", { class: "item", title: "Нет входящих выборов, но ответило меньше 70% класса" },
+        h("span", { class: "swatch", style: { background: GRAPH.unknownFill, border: "2px solid " + GRAPH.unknownBorder } }), "Нет данных"));
+    items.push(h("span", { class: "item" }, h("span", { class: "line", style: { borderTopColor: GRAPH.mutual } }), "Взаимный выбор"));
+    items.push(h("span", { class: "item" }, h("span", { class: "line", style: { borderTopColor: GRAPH.bridge, borderTopStyle: "dashed" } }), "Мост"));
     return h("div", { class: "legend" }, items);
   }
 
@@ -412,18 +765,22 @@
     if (!a) body = emptyState("Нет данных", "Выберите срез.");
     else {
       var m = a.graph_metrics;
-      var wi = m.wellbeing_index != null ? m.wellbeing_index : 0;
-      var wiLabel = wi >= 70 ? "высокий уровень" : wi >= 45 ? "средний уровень" : "низкий уровень";
+      // При низкой явке сервер не считает индекс: такое число говорило бы о
+      // том, сколько детей не прошли опрос, а не о том, что с классом.
+      var wi = m.wellbeing_index;
+      var wiLabel = wi == null ? "недостаточно ответов"
+        : wi >= 70 ? "высокий уровень" : wi >= 45 ? "средний уровень" : "низкий уровень";
       body = h("div", {},
         h("div", { class: "tiles" },
           h("div", { class: "tile tile-hero" },
-            h("div", { class: "tile-label" }, "Индекс благополучия класса"),
-            h("div", { class: "tile-value" }, wi),
-            h("div", { class: "tile-sub" }, wiLabel + " · шкала 0–100")),
-          tile("Учеников", m.students),
-          tile("Изоляты", m.isolates, "нет входящих выборов"),
+            h("div", { class: "tile-label", title: WI_HINT }, "Индекс связности класса"),
+            h("div", { class: "tile-value" }, wi == null ? "—" : wi),
+            h("div", { class: "tile-sub", title: WI_HINT },
+              wiLabel + (wi == null ? "" : " · шкала 0–100 · экспериментальный"))),
+          tile("Учеников", m.students, "прошли опрос: " + m.responded),
+          tile("Изоляты", m.isolates, m.unknown ? "ещё " + m.unknown + " без данных" : "нет входящих выборов"),
           tile("Взаимные пары", m.mutual_pairs, "взаимность " + num(m.reciprocity * 100) + "%"),
-          tile("Плотность", num(m.density, 2), "density")),
+          tile("Плотность", num(m.density, 2), "среди ответивших")),
         h("div", { class: "chip-row", style: { marginTop: "14px" } },
           h("span", { class: "pill" }, "Сплочённость: " + num(m.cohesion, 2)),
           h("span", { class: "pill" }, "Компоненты: " + m.components),
@@ -447,12 +804,13 @@
       var rows = sorted.map(function (s) {
         var m = per[String(s.id)];
         return h("tr", { class: "clickable", onClick: function () { go("/student/" + s.id); } },
-          h("td", {}, dispName(s.id, s.full_name)),
-          h("td", {}, m ? (m.is_isolate ? isolateBadge() : communityPill(m.community)) : "—"),
+          h("td", {}, dispName(s.id, s.full_name),
+            m && !m.responded ? h("span", { class: "muted tiny", title: "Не прошёл(-ла) этот срез" }, " ·  не ответил") : null),
+          h("td", {}, m ? (m.status === "connected" ? communityPill(m.community) : statusPill(m.status)) : "—"),
           h("td", { class: "num" }, m ? m.in_degree : 0),
           h("td", { class: "num" }, m ? m.out_degree : 0),
           h("td", { class: "num" }, m ? m.mutual : 0),
-          h("td", { class: "num" }, m ? m.alone_votes : 0));
+          h("td", { class: "num" }, m ? aloneText(m.alone_votes, m.alone_reportable) : 0));
       });
       body = h("div", { style: { overflowX: "auto" } },
         h("table", { class: "table" },
@@ -463,8 +821,8 @@
     }
     return h("div", { class: "card" },
       h("div", { class: "card-head" }, h("h3", {}, "Ученики"), h("span", { class: "spacer" }),
-        dash.analysis ? h("button", { class: "btn btn-sm", onClick: exportXlsx }, "📊 Экспортировать отчёт") : null,
-        dash.analysis ? h("button", { class: "btn btn-sm", onClick: reportModal }, "📄 Печать/CSV") : null),
+        dash.analysis ? h("button", { class: "btn btn-sm", onClick: exportXlsx }, "Выгрузить в Excel") : null,
+        dash.analysis ? h("button", { class: "btn btn-sm", onClick: reportModal }, "Отчёт и печать") : null),
       h("div", { class: "card-pad", style: { paddingTop: "6px", paddingBottom: "6px" } }, body));
   }
 
@@ -491,9 +849,23 @@
 
   function nodeStyle(n) {
     var base = PALETTE[n.group % PALETTE.length];
-    var color = { background: base, border: base, highlight: { background: base, border: "#e8eefc" } };
+    var color = { background: base, border: base, highlight: { background: base, border: GRAPH.label } };
     var bw = 2;
-    if (dash.filters.isolate && n.isolate) { color = { background: "#fee2e2", border: "#ef4444", highlight: { background: "#fecaca", border: "#ef4444" } }; bw = 3; }
+    if (dash.filters.isolate && n.isolate) {
+      color = {
+        background: GRAPH.isolateFill, border: GRAPH.isolateBorder,
+        highlight: { background: GRAPH.isolateFill, border: GRAPH.isolateBorder },
+      };
+      bw = 3;
+    } else if (n.status === "unknown") {
+      // «Нет данных» — нейтральный серый узел: без входящих выборов, но и без
+      // достаточной явки, чтобы называть это изоляцией. Красным не красим.
+      color = {
+        background: GRAPH.unknownFill, border: GRAPH.unknownBorder,
+        highlight: { background: GRAPH.unknownFill, border: GRAPH.unknownBorder },
+      };
+      bw = 2;
+    }
     var hidden = dash.filters.community !== "" && String(n.group) !== String(dash.filters.community);
     var label = n.label, title = n.title;
     if (dash.filters.anon) {
@@ -504,11 +876,11 @@
     return { id: n.id, label: label, title: title, size: n.size, color: color, borderWidth: bw, hidden: hidden };
   }
   function edgeStyle(e, visible) {
-    var color = "#cbd5e1", width = 1, dashes = false;
-    if (dash.filters.mutual && e.mutual) { color = "#2563eb"; width = 3; }
-    if (dash.filters.bridge && e.bridge) { color = "#f59e0b"; width = 3; dashes = [6, 4]; }
+    var color = GRAPH.edge, width = 1, dashes = false;
+    if (dash.filters.mutual && e.mutual) { color = GRAPH.mutual; width = 2.5; }
+    if (dash.filters.bridge && e.bridge) { color = GRAPH.bridge; width = 2.5; dashes = [6, 4]; }
     var hidden = dash.filters.community !== "" && (!visible.has(e.from) || !visible.has(e.to));
-    return { id: e.id, from: e.from, to: e.to, color: { color: color, highlight: "#93c5fd" }, width: width, dashes: dashes, hidden: hidden };
+    return { id: e.id, from: e.from, to: e.to, color: { color: color, highlight: GRAPH.mutual }, width: width, dashes: dashes, hidden: hidden };
   }
   function buildNetwork() {
     var a = dash.analysis;
@@ -519,7 +891,12 @@
     dash.nodesDS = new vis.DataSet(a.nodes.map(nodeStyle));
     dash.edgesDS = new vis.DataSet(a.edges.map(function (e) { return edgeStyle(e, visible); }));
     var options = {
-      nodes: { shape: "dot", font: { size: 14, color: "#e8eefc" } },
+      // Подпись узла рисуется поверх холста и может попасть на ребро, поэтому
+      // ей даётся светлая обводка: без неё имена читаются через раз.
+      nodes: {
+        shape: "dot",
+        font: { size: 14, color: GRAPH.label, strokeWidth: 3, strokeColor: "#ffffff" },
+      },
       edges: { arrows: { to: { enabled: true, scaleFactor: 0.6 } }, smooth: { type: "continuous" } },
       physics: { stabilization: { iterations: 150 }, barnesHut: { gravitationalConstant: -9000, springLength: 110, springConstant: 0.035, damping: 0.28 } },
       interaction: { hover: true, tooltipDelay: 120, zoomView: true, dragNodes: true, dragView: true },
@@ -549,9 +926,10 @@
     var descIn = h("textarea", { class: "textarea", value: cls && cls.description ? cls.description : "" });
     var err = h("div"); var close;
     function save() {
-      var name = nameIn.value.trim(); if (!name) return;
+      var name = nameIn.value.trim();
+      if (!name) { err.replaceChildren(alertBox("error", "Укажите название класса")); return; }
       var body = { name: name, description: descIn.value.trim() };
-      (cls ? API.put("/api/classes/" + cls.id, body) : API.post("/api/classes", body))
+      return (cls ? API.put("/api/classes/" + cls.id, body) : API.post("/api/classes", body))
         .then(function (d) { dash.classes = null; if (!cls) dash.classId = d.class.id; close(); renderDashboard(); })
         .catch(function (e) { err.replaceChildren(alertBox("error", e.message)); });
     }
@@ -559,9 +937,31 @@
       if (!confirm("Удалить класс со всеми учениками, срезами и ответами?")) return;
       API.del("/api/classes/" + cls.id).then(function () { dash.classes = null; dash.classId = null; dash.surveyId = null; close(); renderDashboard(); });
     }
-    close = openModal(cls ? "Класс" : "Новый класс", [err, field("Название", nameIn), field("Описание", descIn)],
+    // Срок хранения сырых ответов. Показываем его явно: психолог должен знать,
+    // что данные детей не лежат в системе вечно, и уметь сократить срок.
+    var retentionBlock = null;
+    if (cls) {
+      var retIn = h("input", { class: "input", type: "date", value: cls.retention_until || "" });
+      var retMsg = h("div");
+      var retBtn = h("button", { class: "btn btn-sm", onClick: function () {
+        API.put("/api/classes/" + cls.id + "/settings", { retention_until: retIn.value })
+          .then(function (d) { cls.retention_until = d.class.retention_until; retMsg.replaceChildren(alertBox("ok", "Срок хранения сохранён")); })
+          .catch(function (e) { retMsg.replaceChildren(alertBox("error", e.message)); });
+      } }, "Сохранить срок");
+      retentionBlock = h("div", { style: { marginTop: "6px" } },
+        h("div", { class: "section-title" }, "Хранение данных"),
+        h("p", { class: "muted tiny", style: { marginBottom: "8px" } },
+          "После этой даты сырые ответы учеников удаляются, а посчитанные показатели остаются: "
+          + "графики динамики продолжат работать, восстановить по ним отдельные ответы будет нельзя. "
+          + "Срок можно только сократить. Продлить дальше политики школы нельзя."),
+        h("div", { class: "row" }, retIn, retBtn), retMsg);
+    }
+
+    close = openModal(cls ? "Класс" : "Новый класс",
+      [err, field("Название", nameIn), field("Описание", descIn), retentionBlock],
       [cls ? h("button", { class: "btn btn-danger", onClick: remove }, "Удалить") : null, h("div", { style: { flex: "1" } }),
-       h("button", { class: "btn", onClick: function () { close(); } }, "Отмена"), h("button", { class: "btn btn-primary", onClick: save }, "Сохранить")]);
+       h("button", { class: "btn", onClick: function () { close(); } }, "Отмена"),
+       asyncBtn({ class: "btn btn-primary", onClick: save }, "Сохранить")]);
   }
 
   function studentModal(student, onSaved) {
@@ -572,40 +972,151 @@
     var noteIn = h("textarea", { class: "textarea", value: student && student.note ? student.note : "" });
     var err = h("div"); var close;
     function save() {
-      var full = nameIn.value.trim(); if (!full) return;
+      var full = nameIn.value.trim();
+      if (!full) { err.replaceChildren(alertBox("error", "Укажите имя и фамилию")); return; }
       var body = { full_name: full, gender: genderIn.value, birth_date: birthIn.value, note: noteIn.value.trim() };
-      (student ? API.put("/api/students/" + student.id, body) : API.post("/api/classes/" + dash.classId + "/students", body))
+      return (student ? API.put("/api/students/" + student.id, body) : API.post("/api/classes/" + dash.classId + "/students", body))
         .then(function () { close(); if (onSaved) onSaved(); })
         .catch(function (e) { err.replaceChildren(alertBox("error", e.message)); });
     }
     close = openModal(student ? "Ученик" : "Новый ученик",
       [err, field("Имя и фамилия", nameIn), h("div", { class: "row" }, field("Пол", genderIn), field("Дата рождения", birthIn)), field("Заметка", noteIn)],
-      [h("div", { style: { flex: "1" } }), h("button", { class: "btn", onClick: function () { close(); } }, "Отмена"), h("button", { class: "btn btn-primary", onClick: save }, "Сохранить")]);
+      [h("div", { style: { flex: "1" } }), h("button", { class: "btn", onClick: function () { close(); } }, "Отмена"), asyncBtn({ class: "btn btn-primary", onClick: save }, "Сохранить")]);
+  }
+
+  function activeConsent(s) {
+    return (s.consents || []).filter(function (c) { return !c.revoked_on; })[0] || null;
   }
 
   function manageStudentsModal() {
     var listWrap = h("div");
-    function reload() { API.get("/api/classes/" + dash.classId).then(function (d) { dash.students = d.students; render(); }); }
+    var summary = h("div");
+    function reload() {
+      API.get("/api/classes/" + dash.classId).then(function (d) {
+        dash.students = d.students;
+        dash.consent = d.consent;
+        render();
+      });
+    }
     function render() {
-      if (dash.students.length === 0) { listWrap.replaceChildren(emptyState("Список пуст", "Добавьте первого ученика.")); return; }
+      var missing = (dash.consent && dash.consent.missing) || [];
+      summary.replaceChildren(missing.length
+        ? alertBox("info", "Без согласия на обработку данных: " + missing.length + " из "
+            + (dash.consent.total || 0) + ". Эти ученики не участвуют в срезах и не видны одноклассникам в списке выбора.")
+        : (dash.students.length
+            ? alertBox("info", "Согласия оформлены у всех учеников класса.")
+            : h("span")));
+
+      if (dash.students.length === 0) {
+        listWrap.replaceChildren(emptyState("Список пуст", "Добавьте первого ученика."));
+        return;
+      }
       var rows = dash.students.map(function (s) {
-        return h("tr", {},
-          h("td", {}, s.full_name),
-          h("td", { class: "mono" }, s.code),
+        var c = activeConsent(s);
+        var consentCell = c
+          ? h("span", { class: "pill badge-green", title: (c.document_ref || "") + " · с " + fmtDate(c.obtained_on) }, "Есть")
+          : h("button", { class: "btn btn-sm btn-primary", onClick: function () { consentModal(s, reload); } }, "Отметить");
+        return h("tr", { style: s.is_active ? null : { opacity: "0.55" } },
+          h("td", {}, s.full_name, s.is_active ? null : h("span", { class: "muted tiny" }, " · выбыл")),
+          h("td", {}, consentCell),
           h("td", { class: "num" },
-            h("button", { class: "btn btn-ghost btn-sm", title: "Новый код", onClick: function () { API.post("/api/students/" + s.id + "/regenerate-code").then(reload); } }, "⟳"),
-            h("button", { class: "btn btn-ghost btn-sm", title: "Изменить", onClick: function () { studentModal(s, reload); } }, "✎"),
-            h("button", { class: "btn btn-danger btn-sm", title: "Удалить", onClick: function () { if (confirm("Удалить ученика?")) API.del("/api/students/" + s.id).then(reload); } }, "✕")));
+            c ? h("button", {
+              class: "btn btn-ghost btn-sm", title: "Отозвать согласие",
+              onClick: function () {
+                if (confirm("Отозвать согласие для «" + s.full_name + "»?\nОн перестанет участвовать в новых срезах."))
+                  API.del("/api/consents/" + c.id).then(reload);
+              },
+            }, "Отозвать") : null,
+            h("button", { class: "btn btn-ghost btn-sm", title: "Изменить", onClick: function () { studentModal(s, reload); } }, "Изменить"),
+            // Выбывший ученик архивируется, а не удаляется: удаление снесло бы
+            // и его историю в прошлых срезах, и метрики класса за те периоды.
+            h("button", {
+              class: "btn btn-ghost btn-sm",
+              title: s.is_active ? "Выбыл из класса (останется в истории срезов)" : "Вернуть в класс",
+              onClick: function () {
+                API.put("/api/students/" + s.id, {
+                  full_name: s.full_name, gender: s.gender,
+                  birth_date: s.birth_date, note: s.note, is_active: !s.is_active,
+                }).then(function () { dash.cache = {}; reload(); });
+              },
+            }, s.is_active ? "Выбыл" : "Вернуть"),
+            h("button", { class: "btn btn-danger btn-sm", title: "Удалить безвозвратно вместе с историей", onClick: function () { if (confirm("Удалить «" + s.full_name + "» вместе со всей историей?\n\nЕсли ученик просто выбыл из класса — отметьте его как выбывшего, тогда история срезов сохранится.")) API.del("/api/students/" + s.id).then(function () { dash.cache = {}; reload(); }); } }, "Удалить")));
       });
       listWrap.replaceChildren(h("div", { style: { overflowX: "auto" } },
-        h("table", { class: "table" }, h("thead", {}, h("tr", {}, h("th", {}, "Ученик"), h("th", {}, "Код"), h("th", {}))), h("tbody", {}, rows))));
+        h("table", { class: "table" },
+          h("thead", {}, h("tr", {}, h("th", {}, "Ученик"), h("th", {}, "Согласие"), h("th", {}))),
+          h("tbody", {}, rows))));
     }
-    render();
+    reload();
     var close = openModal("Ученики класса",
-      [h("div", { style: { marginBottom: "6px", display: "flex", gap: "8px", flexWrap: "wrap" } },
+      [h("div", { style: { marginBottom: "10px", display: "flex", gap: "8px", flexWrap: "wrap" } },
         h("button", { class: "btn btn-primary btn-sm", onClick: function () { studentModal(null, reload); } }, "+ Добавить ученика"),
-        h("button", { class: "btn btn-sm", onClick: function () { importStudentsModal(reload); } }, "⬆ Импорт Excel/CSV")), listWrap],
-      [h("button", { class: "btn btn-primary", onClick: function () { close(); renderDashboard(); } }, "Готово")], true);
+        h("button", { class: "btn btn-sm", onClick: function () { importStudentsModal(reload); } }, "Импорт из файла"),
+        h("button", { class: "btn btn-sm", onClick: function () { bulkConsentModal(reload); } }, "Согласия пачкой")),
+       summary, listWrap],
+      [h("button", { class: "btn btn-primary", onClick: function () { close(); dash.cache = {}; renderDashboard(); } }, "Готово")], true);
+  }
+
+  // Бланки согласий приносят стопкой с родительского собрания. Отмечать их по
+  // одному никто не станет — и срез в итоге запустили бы вообще без отметок.
+  function bulkConsentModal(onDone) {
+    var missing = (dash.consent && dash.consent.missing) || [];
+    var today = new Date().toISOString().slice(0, 10);
+    var dateIn = h("input", { class: "input", type: "date", value: today });
+    var refIn = h("input", { class: "input", placeholder: "Например: журнал согласий, собрание 05.09" });
+    var msg = h("div");
+    var boxes = missing.map(function (m) {
+      var cb = h("input", { type: "checkbox" });
+      cb.checked = true;
+      return { id: m.id, cb: cb, row: h("label", { class: "check" }, cb, m.full_name) };
+    });
+    var close;
+    function save() {
+      var ids = boxes.filter(function (b) { return b.cb.checked; }).map(function (b) { return b.id; });
+      if (!ids.length) { msg.replaceChildren(alertBox("error", "Никто не выбран")); return; }
+      return API.post("/api/classes/" + dash.classId + "/consents/bulk",
+        { student_ids: ids, obtained_on: dateIn.value, document_ref: refIn.value.trim(), kind: "parent" })
+        .then(function (d) { close(); onDone(); alert("Отмечено согласий: " + d.count); })
+        .catch(function (e) { msg.replaceChildren(alertBox("error", e.message)); });
+    }
+    close = openModal("Согласия пачкой",
+      missing.length
+        ? [h("p", { class: "muted tiny", style: { marginBottom: "10px" } },
+            "Отметьте, по кому получены письменные согласия родителей. Система хранит только факт "
+            + "и ссылку на документ. Бумажные оригиналы остаются у вас."),
+           msg, field("Дата получения", dateIn), field("Где подшиты оригиналы", refIn),
+           h("div", { class: "section-title", style: { marginTop: "10px" } }, "Ученики без согласия"),
+           h("div", { class: "stack", style: { gap: "2px" } }, boxes.map(function (b) { return b.row; }))]
+        : [alertBox("ok", "Согласия оформлены у всех учеников класса.")],
+      missing.length
+        ? [h("button", { class: "btn", onClick: function () { close(); } }, "Отмена"),
+           asyncBtn({ class: "btn btn-primary", onClick: save }, "Отметить")]
+        : [h("button", { class: "btn btn-primary", onClick: function () { close(); } }, "Закрыть")], true);
+  }
+
+  // Согласие на обработку персональных данных. В базе лежат ФИО, дата
+  // рождения и заметки психолога о состоянии несовершеннолетнего — без
+  // основания обрабатывать это нельзя, поэтому без отметки ученик просто не
+  // участвует в срезах.
+  function consentModal(student, onDone) {
+    var today = new Date().toISOString().slice(0, 10);
+    var dateIn = h("input", { class: "input", type: "date", value: today });
+    var refIn = h("input", { class: "input", placeholder: "Например: журнал согласий, стр. 12" });
+    var msg = h("div");
+    var close;
+    function save() {
+      return API.post("/api/students/" + student.id + "/consent",
+        { kind: "parent", obtained_on: dateIn.value, document_ref: refIn.value.trim() })
+        .then(function () { close(); onDone(); })
+        .catch(function (e) { msg.replaceChildren(alertBox("error", e.message)); });
+    }
+    close = openModal("Согласие — " + student.full_name,
+      [h("p", { class: "muted tiny", style: { marginBottom: "10px" } },
+        "Отметьте, что письменное согласие родителя (законного представителя) получено. "
+        + "Система хранит только факт и ссылку на документ. Сам бумажный оригинал остаётся у вас."),
+       msg, field("Дата получения", dateIn), field("Где подшит оригинал", refIn)],
+      [h("button", { class: "btn", onClick: function () { close(); } }, "Отмена"),
+       asyncBtn({ class: "btn btn-primary", onClick: save }, "Согласие получено")]);
   }
 
   function surveyModal() {
@@ -613,27 +1124,56 @@
     var titleIn = h("input", { class: "input", placeholder: "Например, Осенний срез" });
     var dateIn = h("input", { class: "input", type: "date", value: today });
     var qInputs = DEFAULT_QUESTIONS.map(function (q) {
-      return { key: q.key, input: h("input", { class: "input", value: q.text }), hint: q.hint };
+      return {
+        key: q.key, hint: q.hint,
+        input: h("input", { class: "input", value: q.text }),
+        inputKk: h("input", { class: "input", value: q.text_kk }),
+      };
     });
     var qFields = qInputs.map(function (q, i) {
-      return field("Вопрос " + (i + 1) + " (" + q.hint + ")", q.input);
+      return h("div", { style: { marginBottom: "10px" } },
+        field("Вопрос " + (i + 1) + " (" + q.hint + ")", q.input),
+        field("Қазақша", q.inputKk));
     });
     var err = h("div"); var close;
     function save() {
-      var title = titleIn.value.trim(); if (!title) return;
-      var questions = qInputs.map(function (q) { return { key: q.key, text: q.input.value.trim() }; });
-      API.post("/api/classes/" + dash.classId + "/surveys", { title: title, conducted_on: dateIn.value, questions: questions })
-        .then(function (d) { close(); dash.surveyId = d.survey.id; renderDashboard(); setTimeout(function () { codesModal(d.survey); }, 60); })
+      var title = titleIn.value.trim();
+      if (!title) { err.replaceChildren(alertBox("error", "Укажите название среза")); return; }
+      // Пустая формулировка вопроса на сервере заменится на текст по умолчанию,
+      // но психолог должен об этом узнать до создания, а не после.
+      var empty = qInputs.filter(function (q) { return !q.input.value.trim(); });
+      if (empty.length) {
+        err.replaceChildren(alertBox("error", "Заполните формулировки всех трёх вопросов"));
+        return;
+      }
+      var questions = qInputs.map(function (q) {
+        return { key: q.key, text: q.input.value.trim(), text_kk: q.inputKk.value.trim() };
+      });
+      return API.post("/api/classes/" + dash.classId + "/surveys", { title: title, conducted_on: dateIn.value, questions: questions })
+        .then(function (d) {
+          close();
+          dash.surveyId = d.survey.id;
+          dash.cache = {};
+          renderDashboard();
+          if (d.excluded && d.excluded.length) {
+            alert("Срез создан. Не участвуют (нет отметки о согласии): "
+              + d.excluded.map(function (e2) { return e2.full_name; }).join(", "));
+          }
+          setTimeout(function () { codesModal(d.survey); }, 60);
+        })
         .catch(function (e) { err.replaceChildren(alertBox("error", e.message)); });
     }
     close = openModal("Новый срез",
       [err, field("Название", titleIn), field("Дата проведения", dateIn),
        h("div", { class: "section-title", style: { marginTop: "6px" } }, "Вопросы (можно адаптировать под возраст класса)"),
        qFields,
-       h("p", { class: "muted tiny" }, "Смысл вопросов фиксирован (2 положительных + 1 на изоляцию) — меняется только формулировка. После создания откроется окно со ссылкой и QR-кодом.")],
-      [h("button", { class: "btn", onClick: function () { close(); } }, "Отмена"), h("button", { class: "btn btn-primary", onClick: save }, "Создать")]);
+       h("p", { class: "muted tiny" }, "Смысл вопросов фиксирован: два положительных и один на изоляцию. Меняется только формулировка. Ученик сам переключает язык на странице опроса. После создания откроется окно со ссылкой и QR-кодом.")],
+      [h("button", { class: "btn", onClick: function () { close(); } }, "Отмена"), asyncBtn({ class: "btn btn-primary", onClick: save }, "Создать")]);
   }
 
+  // Коды раздаются на конкретный срез и в других срезах не работают. Если код
+  // подсмотрели и ответили за ученика — психолог перевыпускает его здесь же,
+  // не трогая остальных.
   function codesModal(sv) {
     var link = location.origin + "/survey.html?survey=" + sv.id;
     var qrBox = h("div", { class: "qr-box" });
@@ -645,30 +1185,67 @@
       qrBox,
       h("div", { class: "row", style: { marginTop: "6px" } },
         linkIn,
-        h("button", { class: "btn", onClick: function () { linkIn.select(); document.execCommand && document.execCommand("copy"); } }, "Копировать")),
-      h("div", { class: "section-title", style: { marginTop: "10px" } }, "Коды учеников (для печати и раздачи)"),
+        h("button", { class: "btn", onClick: function () { linkIn.select(); try { document.execCommand("copy"); } catch (e) {} } }, "Копировать")),
+      h("div", { class: "section-title", style: { marginTop: "10px" } }, "Коды на этот срез (для печати и раздачи)"),
       codesWrap,
     ];
     var close = openModal("Ссылка и QR — " + sv.title, body,
-      [h("button", { class: "btn", onClick: function () { window.print(); } }, "🖨 Печать кодов"),
+      [h("button", { class: "btn", onClick: function () { window.print(); } }, "Печать кодов"),
        h("div", { style: { flex: "1" } }), h("button", { class: "btn btn-primary", onClick: function () { close(); } }, "Закрыть")], true);
-    // QR
+
     if (typeof QRCode !== "undefined") { try { new QRCode(qrBox, { text: link, width: 190, height: 190, correctLevel: QRCode.CorrectLevel.M }); } catch (e) { qrBox.textContent = link; } }
     else qrBox.textContent = "QR-библиотека не загрузилась. Используйте ссылку выше.";
-    // codes
-    API.get("/api/classes/" + dash.classId + "/codes").then(function (d) {
-      var grid = h("div", { class: "code-grid" }, d.codes.map(function (c) {
-        return h("div", { class: "code-card" }, h("div", { class: "nm" }, c.full_name), h("div", { class: "cd" }, c.code));
-      }));
-      codesWrap.replaceChildren(h("div", { class: "muted tiny no-print", style: { marginBottom: "8px" } }, "Каждый ученик вводит свой код на странице опроса."), grid);
-    });
+
+    function loadTickets() {
+      API.get("/api/surveys/" + sv.id + "/tickets").then(function (d) {
+        var grid = h("div", { class: "code-grid" }, d.tickets.map(function (t) {
+          return h("div", { class: "code-card" + (t.done ? " done" : "") },
+            h("div", { class: "nm" }, t.full_name),
+            h("div", { class: "cd" }, t.code),
+            t.done ? h("div", { class: "muted tiny no-print" }, "Прошёл") : null,
+            h("button", {
+              class: "btn btn-ghost btn-sm no-print",
+              title: "Перевыпустить код: старый перестанет работать, ответы ученика по этому срезу будут удалены",
+              onClick: function () {
+                if (!confirm("Перевыпустить код для «" + t.full_name + "»?\n\nСтарый код перестанет работать, а его ответы по этому срезу будут удалены."))
+                  return;
+                API.post("/api/surveys/" + sv.id + "/students/" + t.student_id + "/reissue")
+                  .then(function () { loadTickets(); dash.cache = {}; })
+                  .catch(function (e) { alert(e.message); });
+              },
+            }, "Новый код"));
+        }));
+
+        var excluded = d.excluded.length
+          ? h("div", { class: "alert alert-info no-print", style: { marginBottom: "10px" } },
+              "Не участвуют (нет отметки о согласии на обработку данных): "
+              + d.excluded.map(function (e) { return e.full_name; }).join(", ")
+              + ". Отметьте согласие в разделе «Ученики» и нажмите «Обновить коды».")
+          : null;
+
+        codesWrap.replaceChildren(
+          h("div", { class: "muted tiny no-print", style: { marginBottom: "8px" } },
+            "Код действует только в этом срезе. Каждый ученик вводит свой код на странице опроса."),
+          excluded,
+          d.excluded.length ? h("button", {
+            class: "btn btn-sm no-print", style: { marginBottom: "10px" },
+            onClick: function () { API.post("/api/surveys/" + sv.id + "/tickets/refresh").then(loadTickets); },
+          }, "Обновить коды") : null,
+          grid);
+      }).catch(function (e) { codesWrap.replaceChildren(alertBox("error", e.message)); });
+    }
+    loadTickets();
   }
 
   /* -------------------------------------------------- радар изоляции */
   function radarCard() {
     var a = dash.analysis; if (!a) return null;
+    // Радар — это список «пойти и поработать с ребёнком». Поэтому он молчит на
+    // недостоверном срезе и не поднимает тревогу по одной-двум номинациям:
+    // порог тот же, что и в остальном интерфейсе (analytics.ALONE_MIN_REPORT).
+    if (a.graph_metrics.reliability === "low") return null;
     var per = a.per_student;
-    var risk = dash.students.filter(function (s) { var m = per[String(s.id)]; return m && (m.is_isolate || (m.alone_votes || 0) >= 2); });
+    var risk = dash.students.filter(function (s) { var m = per[String(s.id)]; return m && (m.is_isolate || m.alone_reportable); });
     if (risk.length === 0) return null;
     risk.sort(function (x, y) {
       var mx = per[String(x.id)], my = per[String(y.id)];
@@ -677,45 +1254,27 @@
     });
     var chips = risk.map(function (s) {
       var m = per[String(s.id)];
-      var tag = (m.is_isolate ? " · изолят" : "") + ((m.alone_votes || 0) ? " · «один»×" + m.alone_votes : "");
-      return h("button", { class: "pill", style: { cursor: "pointer", borderColor: "rgba(239,68,68,0.45)", color: "var(--red)" }, onClick: function () { go("/student/" + s.id); } }, s.full_name + tag);
+      var tag = (m.is_isolate ? " · изолят" : "") + (m.alone_reportable ? " · «один»×" + m.alone_votes : "");
+      return h("button", { class: "pill badge-red", style: { cursor: "pointer" }, onClick: function () { go("/student/" + s.id); } }, s.full_name + tag);
     });
-    return h("div", { class: "card", style: { marginBottom: "18px", borderColor: "rgba(239,68,68,0.42)", background: "linear-gradient(180deg, rgba(239,68,68,0.12), rgba(239,68,68,0.03))" } },
+    return h("div", { class: "card dropbar", style: { marginBottom: "18px" } },
       h("div", { class: "card-pad" },
-        h("div", { style: { display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" } },
-          h("span", { style: { fontSize: "22px" } }, "⚠️"),
+        h("div", { style: { display: "flex", alignItems: "baseline", gap: "10px", flexWrap: "wrap" } },
           h("div", { style: { flex: "1", minWidth: "200px" } },
-            h("div", { style: { fontWeight: "700", fontSize: "15px" } }, "Радар изоляции: " + risk.length + " на контроль"),
-            h("div", { class: "muted tiny" }, "Изоляты и ученики с номинациями «часто остаётся один» — требуют внимания")),
+            h("div", { style: { fontWeight: "650", fontSize: "15px", color: "var(--red)" } },
+              "Требуют внимания: " + risk.length),
+            h("div", { class: "muted tiny" },
+              "Изоляты и ученики, которых класс отмечает как одиноких")),
           h("span", { class: "badge badge-red" }, String(risk.length))),
         h("div", { class: "chip-row", style: { marginTop: "12px" } }, chips)));
   }
 
   /* -------------------------------------------------- экспорт в Excel (.xlsx) */
+  // Файл собирает сервер (openpyxl). Раньше он строился в браузере библиотекой
+  // с CDN: без интернета кнопка не работала, а школьные сети cdnjs фильтруют.
   function exportXlsx() {
-    var a = dash.analysis;
-    if (!a) return;
-    if (typeof XLSX === "undefined") { alert("Библиотека Excel не загрузилась — нужен интернет."); return; }
-    var per = a.per_student, sv = currentSurvey();
-    var sorted = dash.students.slice().sort(function (x, y) {
-      var mx = per[String(x.id)], my = per[String(y.id)];
-      return ((mx && mx.in_degree) || 0) - ((my && my.in_degree) || 0);
-    });
-    var rows = [["Ученик", "Входящие связи", "Исходящие связи", "Взаимные выборы", "Изолят", "Betweenness centrality", "Сообщество (группа)"]];
-    sorted.forEach(function (s) {
-      var m = per[String(s.id)] || {};
-      rows.push([
-        s.full_name, m.in_degree || 0, m.out_degree || 0, m.mutual || 0,
-        m.is_isolate ? "да" : "нет", m.betweenness || 0, (m.community || 0) + 1,
-      ]);
-    });
-    var ws = XLSX.utils.aoa_to_sheet(rows);
-    ws["!cols"] = [{ wch: 26 }, { wch: 15 }, { wch: 15 }, { wch: 16 }, { wch: 8 }, { wch: 22 }, { wch: 18 }];
-    var wb = XLSX.utils.book_new();
-    var sheet = (sv ? sv.title : "Отчёт").replace(/[:\\/?*\[\]]/g, " ").slice(0, 28) || "Отчёт";
-    XLSX.utils.book_append_sheet(wb, ws, sheet);
-    var fname = "izolyat_" + String(dash.cls.name || "class").replace(/\s+/g, "_") + ".xlsx";
-    XLSX.writeFile(wb, fname);
+    if (!dash.surveyId) return;
+    window.location.href = "/api/surveys/" + dash.surveyId + "/export.xlsx" + tokenQuery();
   }
 
   /* -------------------------------------------------- отчёт (CSV/печать) */
@@ -726,12 +1285,17 @@
       var mx = per[String(x.id)], my = per[String(y.id)];
       return ((mx && mx.in_degree) || 0) - ((my && my.in_degree) || 0);
     });
-    function statusText(m) { return !m ? "—" : m.is_isolate ? "Изолят" : "Группа " + ((m.community || 0) + 1); }
+    function statusText(m) {
+      if (!m) return "—";
+      if (m.status === "isolate") return "Изолят";
+      if (m.status === "unknown") return "Нет данных";
+      return "Группа " + ((m.community || 0) + 1);
+    }
     var tbody = h("tbody", {}, sorted.map(function (s) {
       var m = per[String(s.id)] || {};
       return h("tr", {}, h("td", {}, s.full_name), h("td", {}, statusText(m)),
         h("td", { class: "num" }, m.in_degree || 0), h("td", { class: "num" }, m.out_degree || 0),
-        h("td", { class: "num" }, m.mutual || 0), h("td", { class: "num" }, m.alone_votes || 0),
+        h("td", { class: "num" }, m.mutual || 0), h("td", { class: "num" }, aloneText(m.alone_votes, m.alone_reportable)),
         h("td", { class: "num" }, num(m.degree_centrality, 2)), h("td", { class: "num" }, num(m.betweenness, 3)));
     }));
     var report = h("div", { class: "print-area" },
@@ -739,10 +1303,17 @@
       h("p", { class: "muted", style: { marginBottom: "12px" } }, sv ? sv.title + " · " + fmtDate(sv.conducted_on) : ""),
       h("div", { class: "chip-row", style: { marginBottom: "14px" } },
         h("span", { class: "pill" }, "Учеников: " + gm.students),
+        h("span", { class: "pill" }, "Прошли опрос: " + gm.responded + " (" + Math.round((gm.participation || 0) * 100) + "%)"),
         h("span", { class: "pill" }, "Изоляты: " + gm.isolates),
+        gm.unknown ? h("span", { class: "pill" }, "Без данных: " + gm.unknown) : null,
         h("span", { class: "pill" }, "Взаимные пары: " + gm.mutual_pairs),
         h("span", { class: "pill" }, "Плотность: " + num(gm.density, 2)),
         h("span", { class: "pill" }, "Сплочённость: " + num(gm.cohesion, 2))),
+      // Отчёт уходит завучу и в личное дело — оговорка о достоверности должна
+      // ехать вместе с цифрами, а не оставаться на экране психолога.
+      gm.reliability === "low" ? h("p", { class: "muted", style: { marginBottom: "12px" } },
+        "Внимание: опрос прошли менее 70% класса. Показатели считаются по ответившим, "
+        + "статус «изолят» в этом срезе не присваивается.") : null,
       h("div", { style: { overflowX: "auto" } }, h("table", { class: "table" },
         h("thead", {}, h("tr", {}, h("th", {}, "Ученик"), h("th", {}, "Статус"),
           h("th", { class: "num" }, "Вх"), h("th", { class: "num" }, "Исх"), h("th", { class: "num" }, "Вз"),
@@ -750,19 +1321,20 @@
         tbody)));
     function csvRows() {
       var rows = [["Класс", dash.cls.name], ["Срез", sv ? sv.title : "", sv ? sv.conducted_on : ""],
-        ["Учеников", gm.students, "Изоляты", gm.isolates, "Взаимные пары", gm.mutual_pairs],
-        ["Плотность", gm.density, "Сплочённость", gm.cohesion, "Взаимность", gm.reciprocity], [],
+        ["Учеников", gm.students, "Прошли опрос", gm.responded, "Явка", Math.round((gm.participation || 0) * 100) + "%"],
+        ["Достоверность", gm.reliability, "Изоляты", gm.isolates, "Без данных", gm.unknown],
+        ["Взаимные пары", gm.mutual_pairs, "Плотность", gm.density, "Сплочённость", gm.cohesion, "Взаимность", gm.reciprocity], [],
         ["Ученик", "Статус", "Входящие", "Исходящие", "Взаимные", "Часто один", "Degree centrality", "Betweenness", "Группа"]];
       sorted.forEach(function (s) {
         var m = per[String(s.id)] || {};
-        rows.push([s.full_name, statusText(m), m.in_degree || 0, m.out_degree || 0, m.mutual || 0, m.alone_votes || 0, m.degree_centrality || 0, m.betweenness || 0, (m.community || 0) + 1]);
+        rows.push([s.full_name, statusText(m), m.in_degree || 0, m.out_degree || 0, m.mutual || 0, aloneText(m.alone_votes, m.alone_reportable), m.degree_centrality || 0, m.betweenness || 0, (m.community || 0) + 1]);
       });
       return rows;
     }
     var fname = "izolyat_" + String(dash.cls.name || "class").replace(/\s+/g, "_") + ".csv";
     var close = openModal("Отчёт класса", report,
-      [h("button", { class: "btn", onClick: function () { downloadCSV(fname, csvRows()); } }, "⬇ CSV для Excel"),
-       h("button", { class: "btn", onClick: function () { window.print(); } }, "🖨 Печать"),
+      [h("button", { class: "btn", onClick: function () { downloadCSV(fname, csvRows()); } }, "Скачать CSV"),
+       h("button", { class: "btn", onClick: function () { window.print(); } }, "Печать"),
        h("div", { style: { flex: "1" } }),
        h("button", { class: "btn btn-primary", onClick: function () { close(); } }, "Закрыть")], true);
   }
@@ -824,17 +1396,39 @@
 
   /* -------------------------------------------------- импорт учеников */
   function importStudentsModal(onDone) {
-    var info = h("div", { class: "muted tiny" }, "Excel/CSV: имя берётся из первого столбца (поддерживаются колонки: имя, пол, дата). Или вставьте список вручную.");
-    var fileIn = h("input", { class: "input", type: "file", accept: ".xlsx,.xls,.csv" });
+    var info = h("div", { class: "muted tiny" }, "Excel (.xlsx) или CSV: имя берётся из колонки «ФИО»/«Имя», а если заголовков нет, берётся первый столбец. Или вставьте список вручную.");
+    var fileIn = h("input", { class: "input", type: "file", accept: ".xlsx,.csv,.txt" });
     var ta = h("textarea", { class: "textarea", style: { minHeight: "170px" }, placeholder: "По одному ученику в строке:\nАлина Смирнова\nБорис Кузнецов, м, 2011-05-14" });
     var msg = h("div"); var close;
+    // Файл разбирает сервер: раньше это делала библиотека с CDN, и в школьной
+    // сети без доступа к cdnjs импорт не работал вовсе.
     fileIn.addEventListener("change", function () {
       var f = fileIn.files && fileIn.files[0]; if (!f) return;
       msg.replaceChildren(h("span", { class: "muted tiny" }, "Читаю файл…"));
-      parseFile(f, function (lines) {
-        ta.value = (ta.value ? ta.value.trim() + "\n" : "") + lines.join("\n");
-        msg.replaceChildren(alertBox("ok", "Из файла добавлено строк: " + lines.length + ". Проверьте список и нажмите «Импортировать»."));
-      }, function (err) { msg.replaceChildren(alertBox("error", err)); });
+      var fd = new FormData();
+      fd.append("file", f);
+      fetch("/api/classes/" + dash.classId + "/students/import", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + localStorage.getItem("izolyat.token") },
+        body: fd,
+      })
+        // json() бросает на не-JSON ответе (502 от прокси, HTML-страница
+        // ошибки) — тогда пользователь увидел бы «Unexpected token <».
+        .then(function (r) {
+          return r.json().catch(function () { return null; }).then(function (d) {
+            if (!r.ok) throw new Error(errMsg(d, r.status));
+            return d;
+          });
+        }, function () { throw new Error("Нет связи с сервером. Проверьте подключение и повторите."); })
+        .then(function (d) {
+          var lines = d.students.map(function (s) {
+            return [s.full_name, s.gender === "m" ? "м" : s.gender === "f" ? "ж" : "", s.birth_date || ""]
+              .filter(Boolean).join(", ");
+          });
+          ta.value = (ta.value ? ta.value.trim() + "\n" : "") + lines.join("\n");
+          msg.replaceChildren(alertBox("ok", "Из файла прочитано строк: " + lines.length + ". Проверьте список и нажмите «Импортировать»."));
+        })
+        .catch(function (e) { msg.replaceChildren(alertBox("error", e.message)); });
     });
     function parseLines() {
       return ta.value.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean).map(function (l) {
@@ -858,46 +1452,18 @@
       [h("button", { class: "btn", onClick: function () { close(); } }, "Отмена"), h("button", { class: "btn btn-primary", onClick: doImport }, "Импортировать")], true);
   }
 
-  function parseFile(file, ok, fail) {
-    var reader = new FileReader();
-    reader.onload = function (e) {
-      try {
-        if (typeof XLSX === "undefined") { fail("Библиотека для Excel не загрузилась (нужен интернет). Сохраните файл как CSV или вставьте список вручную."); return; }
-        var wb = XLSX.read(new Uint8Array(e.target.result), { type: "array" });
-        var ws = wb.Sheets[wb.SheetNames[0]];
-        var grid = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false });
-        var lines = [];
-        grid.forEach(function (r) {
-          if (!r || !r.length) return;
-          var first = (r[0] == null ? "" : String(r[0])).trim();
-          if (!first) return;
-          var line = first;
-          if (r[1] != null && String(r[1]).trim()) line += ", " + String(r[1]).trim();
-          if (r[2] != null && String(r[2]).trim()) line += ", " + String(r[2]).trim();
-          lines.push(line);
-        });
-        if (lines.length && /^(имя|фио|name|ученик|ф\.?и\.?о)/i.test(lines[0])) lines.shift();
-        if (!lines.length) { fail("В файле не найдено имён."); return; }
-        ok(lines);
-      } catch (err) { fail("Не удалось прочитать файл."); }
-    };
-    reader.onerror = function () { fail("Ошибка чтения файла."); };
-    reader.readAsArrayBuffer(file);
-  }
-
   /* ========================================================= STUDENT CARD */
   function renderStudent(id) {
     stopNetwork();
     mount(shell(spinner()));
     API.get("/api/students/" + id + "/card").then(buildStudent)
-      .catch(function (e) { mount(shell(h("div", {}, alertBox("error", e.message), h("p", { style: { marginTop: "12px" } }, h("a", { href: "#/" }, "← На главную"))))); });
+      .catch(function (e) { mount(shell(h("div", {}, alertBox("error", e.message), h("p", { style: { marginTop: "12px" } }, h("a", { href: "#/" }, "На главную"))))); });
   }
 
   function buildStudent(data) {
     var student = data.student;
-    var roster = {}; data.roster.forEach(function (r) { roster[r.id] = r.full_name; });
-    var nameOf = function (sid) { return roster[sid] || "—"; };
-    var surveysAsc = data.surveys.slice().sort(function (a, b) { return a.conducted_on < b.conducted_on ? -1 : 1; });
+    // dynamics приходят уже отсортированными по дате среза и содержат только
+    // агрегаты — сырых выборов с авторством сервер больше не отдаёт.
     var dyn = data.dynamics;
     var latest = dyn.length ? dyn[dyn.length - 1] : null;
 
@@ -911,15 +1477,20 @@
           student.note ? h("p", { class: "muted", style: { marginTop: "8px" } }, student.note) : null),
         h("div", { style: { textAlign: "right" } },
           h("div", { class: "section-title" }, "Текущий статус"),
-          latest ? (latest.is_isolate ? isolateBadge() : communityPill(latest.community)) : h("span", { class: "muted" }, "нет срезов"),
+          latest ? (latest.status === "connected" && latest.community != null
+            ? communityPill(latest.community) : statusPill(latest.status)) : h("span", { class: "muted" }, "нет срезов"),
           latest ? h("div", { class: "muted tiny", style: { marginTop: "6px" } }, "на " + fmtDate(latest.date)) : null)));
 
-    var metricsBody = latest ? h("div", { class: "tiles" },
-      tile("Входящие", latest.in_degree, "кто выбрал"),
-      tile("Исходящие", latest.out_degree, "кого выбрал"),
-      tile("Взаимные", latest.mutual, "пары"),
-      tile("«Часто один»", latest.alone_votes, "номинаций"),
-      tile("Betweenness", num(latest.betweenness, 3), "посредничество"))
+    var metricsBody = latest ? h("div", {},
+      h("div", { class: "tiles" },
+        tile("Входящие", latest.in_degree, "кто выбрал"),
+        tile("Исходящие", latest.out_degree, "кого выбрал"),
+        tile("Взаимные", latest.mutual, "пары"),
+        tile("«Часто один»", latest.alone_count == null ? "менее 3" : latest.alone_count, "номинаций"),
+        tile("Betweenness", num(latest.betweenness, 3), "посредничество")),
+      latest.reliability === "low" ? h("div", { style: { marginTop: "12px" } },
+        alertBox("info", "Последний срез прошли " + Math.round((latest.participation || 0) * 100)
+          + "% класса. Показатели считаются по ответившим, судить об изоляции по ним нельзя.")) : null)
       : emptyState("Нет данных", "Нужен хотя бы один заполненный срез.");
     var metricsCardEl = h("div", { class: "card", style: { marginBottom: "18px" } },
       h("div", { class: "card-head" }, h("h3", {}, "Показатели"), h("span", { class: "spacer" }),
@@ -931,9 +1502,10 @@
       var trs = dyn.map(function (p, i) {
         return h("tr", {},
           h("td", {}, p.title), h("td", {}, fmtDate(p.date)),
-          h("td", {}, p.is_isolate ? isolateBadge() : communityPill(p.community)),
+          h("td", {}, statusPill(p.status)),
           h("td", { class: "num" }, p.in_degree), h("td", { class: "num" }, p.out_degree),
-          h("td", { class: "num" }, p.mutual), h("td", { class: "num" }, p.alone_votes),
+          h("td", { class: "num" }, p.mutual),
+          h("td", { class: "num" }, p.alone_count == null ? h("span", { class: "muted" }, "<3") : p.alone_count),
           h("td", { class: "num" }, i === 0 ? h("span", { class: "muted" }, "—") : deltaSpan(p.in_degree - dyn[i - 1].in_degree)));
       });
       dynTable = h("div", { style: { overflowX: "auto", marginTop: "12px" } },
@@ -947,8 +1519,8 @@
 
     var historyCard = h("div", { class: "card", style: { marginBottom: "18px" } },
       h("div", { class: "card-head" }, h("h3", {}, "История связей"), h("span", { class: "spacer" }), h("span", { class: "muted tiny" }, "изменение по срезам")),
-      h("div", { class: "card-pad" }, surveysAsc.length === 0 ? emptyState("Нет срезов")
-        : h("div", { class: "stack" }, surveysAsc.slice().reverse().map(function (sv) { return connectionBlock(sv, student.id, data.choices_by_survey[String(sv.id)] || [], nameOf); }))));
+      h("div", { class: "card-pad" }, dyn.length === 0 ? emptyState("Нет срезов")
+        : h("div", { class: "stack" }, dyn.slice().reverse().map(function (p) { return connectionBlock(p); }))));
 
     var intCard = h("div", { class: "card", style: { marginBottom: "18px" } },
       h("div", { class: "card-head" }, h("h3", {}, "Вмешательства и эффективность")),
@@ -978,43 +1550,44 @@
 
   function listRow(when, body, onDelete) {
     return h("div", { class: "list-item" }, h("div", { class: "when" }, when), h("div", { class: "body" }, body),
-      h("button", { class: "btn btn-danger btn-sm", onClick: onDelete }, "✕"));
+      h("button", { class: "btn btn-danger btn-sm", onClick: onDelete }, "Удалить"));
   }
 
-  function connectionBlock(survey, studentId, choices, nameOf) {
-    var pos = ["cinema", "project"];
-    var outPos = {}, incPos = {};
-    choices.forEach(function (c) {
-      if (c.from_student === studentId && pos.indexOf(c.question) >= 0) outPos[c.to_student] = true;
-      if (c.to_student === studentId && pos.indexOf(c.question) >= 0) incPos[c.from_student] = true;
-    });
-    function group(filterFn) { return choices.filter(filterFn); }
-    var out = group(function (c) { return c.from_student === studentId && pos.indexOf(c.question) >= 0; });
-    var outAlone = group(function (c) { return c.from_student === studentId && c.question === "alone"; });
-    var inc = group(function (c) { return c.to_student === studentId && pos.indexOf(c.question) >= 0; });
-    var incAlone = group(function (c) { return c.to_student === studentId && c.question === "alone"; });
-
-    function pill(name, kind, mutual) {
-      var color = kind === "alone" ? "var(--amber)" : kind === "in" ? "var(--accent)" : "var(--green)";
-      return h("span", { class: "pill", style: { color: color, borderColor: mutual ? "var(--accent)" : "var(--border)" } },
-        (mutual ? "↔ " : "") + name);
+  // Сводка по одному срезу.
+  //
+  // Раньше здесь рисовался поимённый список «отметили как часто один» — то
+  // есть психолог видел, кто из детей назвал этого ребёнка одиноким. Сервер
+  // такие данные больше не отдаёт вообще (см. app/analytics.py): негативная
+  // номинация приходит только числом и только начиная с трёх. Положительные
+  // связи остаются — они и так видны на социограмме, — но здесь показываются
+  // счётчиками и взаимными парами, а не списком «кто тебя выбрал».
+  function connectionBlock(p) {
+    var aloneTxt = p.alone_count == null ? "менее 3" : String(p.alone_count);
+    var body;
+    if (!p.responded && p.in_degree === 0) {
+      body = h("span", { class: "muted tiny" }, "Ученик не проходил этот срез, и его никто не выбрал.");
+    } else {
+      body = h("div", {},
+        h("div", { class: "tiles" },
+          tile("Входящие", p.in_degree, "кто выбрал его / её"),
+          tile("Исходящие", p.out_degree, "кого выбрал(а)"),
+          tile("Взаимные", p.mutual, "пары"),
+          tile("«Часто один»", aloneTxt, "номинаций класса")),
+        p.mutual_names && p.mutual_names.length
+          ? h("div", { style: { marginTop: "10px" } },
+              h("div", { class: "section-title" }, "Взаимные симпатии"),
+              h("div", { class: "chip-row" }, p.mutual_names.map(function (nm) {
+                return h("span", { class: "pill", style: { color: "var(--accent)", borderColor: "var(--accent)" } }, "Взаимно: " + nm);
+              })))
+          : h("div", { class: "muted tiny", style: { marginTop: "10px" } }, "Взаимных пар в этом срезе нет."));
     }
-    function grp(title, items) {
-      return h("div", {}, h("div", { class: "section-title" }, title),
-        items.length ? h("div", { class: "chip-row" }, items) : h("span", { class: "muted tiny" }, "—"));
-    }
-    var empty = out.length + outAlone.length + inc.length + incAlone.length === 0;
     return h("div", { style: { borderBottom: "1px solid var(--border)", paddingBottom: "14px" } },
-      h("div", { style: { display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" } },
-        h("b", {}, survey.title), h("span", { class: "muted tiny" }, fmtDate(survey.conducted_on))),
-      empty ? h("span", { class: "muted tiny" }, "Нет ответов в этом срезе.") :
-        h("div", { class: "two-col", style: { gap: "16px" } },
-          h("div", {},
-            grp("Выбирает (кино/проект)", out.map(function (c) { return pill(nameOf(c.to_student), "out", !!outPos[c.to_student] && !!incPos[c.to_student]); })),
-            outAlone.length ? h("div", { style: { marginTop: "10px" } }, grp("Отметил(а) «часто один»", outAlone.map(function (c) { return pill(nameOf(c.to_student), "alone", false); }))) : null),
-          h("div", {},
-            grp("Выбрали его / её", inc.map(function (c) { return pill(nameOf(c.from_student), "in", !!outPos[c.from_student] && !!incPos[c.from_student]); })),
-            incAlone.length ? h("div", { style: { marginTop: "10px" } }, grp("Отметили как «часто один»", incAlone.map(function (c) { return pill(nameOf(c.from_student), "alone", false); }))) : null)));
+      h("div", { style: { display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px", flexWrap: "wrap" } },
+        h("b", {}, p.title), h("span", { class: "muted tiny" }, fmtDate(p.date)),
+        h("span", { style: { flex: "1" } }),
+        statusPill(p.status),
+        p.reliability === "low" ? lowDataPill(p.participation) : null),
+      body);
   }
 
   function interventionItem(iv, dyn, studentId) {
@@ -1027,11 +1600,11 @@
       h("div", { style: { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" } },
         h("b", {}, iv.title), stars(iv.effectiveness), h("div", { style: { flex: "1" } }),
         h("span", { class: "muted tiny" }, fmtDate(iv.started_on) + " — " + (iv.ended_on ? fmtDate(iv.ended_on) : "по наст. время")),
-        h("button", { class: "btn btn-danger btn-sm", onClick: function () { if (confirm("Удалить вмешательство?")) API.del("/api/interventions/" + iv.id).then(function () { renderStudent(studentId); }); } }, "✕")),
+        h("button", { class: "btn btn-danger btn-sm", onClick: function () { if (confirm("Удалить вмешательство?")) API.del("/api/interventions/" + iv.id).then(function () { renderStudent(studentId); }); } }, "Удалить")),
       iv.description ? h("p", { class: "muted", style: { marginTop: "6px" } }, iv.description) : null,
       iv.outcome ? h("p", { style: { marginTop: "6px" } }, h("b", {}, "Итог: "), iv.outcome) : null,
       h("div", { style: { marginTop: "8px" } }, delta != null
-        ? h("span", { class: "pill" }, "Входящие выборы: " + before.in_degree + " → " + after.in_degree + " ", deltaSpan(delta))
+        ? h("span", { class: "pill" }, "Входящие выборы: было " + before.in_degree + ", стало " + after.in_degree + " ", deltaSpan(delta))
         : h("span", { class: "muted tiny" }, "Недостаточно срезов до и после для оценки динамики.")));
   }
 
@@ -1074,7 +1647,7 @@
           h("div", { class: "row" }, field("Начало", startIn), field("Окончание", endIn), field("Эффективность", effIn)),
           field("Итог / результат", outcomeIn),
           h("div", { style: { display: "flex", gap: "10px" } },
-            h("button", { class: "btn btn-primary btn-sm", onClick: save }, "Сохранить"),
+            asyncBtn({ class: "btn btn-primary btn-sm", onClick: save }, "Сохранить"),
             h("button", { class: "btn btn-sm", onClick: function () { wrap.replaceChildren(openBtn); } }, "Отмена"))));
     }
     return wrap;
@@ -1115,12 +1688,723 @@
   }
 
   /* ============================================================ router */
+  /* ============================================== ГЛАВНАЯ: все классы */
+  // Работа психолога — 250-300 учеников в десятке классов. Открывать каждый
+  // класс по очереди, чтобы понять, где что-то происходит, невозможно, поэтому
+  // главный экран — список классов, отсортированный по тому, куда смотреть
+  // в первую очередь.
+  function renderHome() {
+    stopNetwork();
+    mount(shell(spinner()));
+    Promise.all([API.get("/api/overview"), refreshUnseen()])
+      .then(function (res) { mount(shell(homeView(res[0]))); })
+      .catch(function (e) { mount(shell(alertBox("error", e.message))); });
+  }
+
+  function homeView(data) {
+    var rows = data.classes;
+    if (!rows.length) {
+      return h("div", {}, homeHeader(0),
+        h("div", { class: "card card-pad" }, emptyState("Ещё нет ни одного класса",
+          "Создайте класс, добавьте учеников, отметьте согласия родителей и запускайте срез.",
+          h("button", { class: "btn btn-primary", onClick: function () { classModal(null); } }, "Создать класс"))));
+    }
+
+    var cards = rows.map(function (r) {
+      var c = r["class"];
+      var wi = r.wellbeing_index;
+      var needsSurvey = !r.last_survey;
+      var lowData = r.reliability === "low";
+
+      var badges = [];
+      if (r.open_alerts) badges.push(h("span", { class: "badge badge-red" }, "Сигналов: " + r.open_alerts));
+      if (r.isolates) badges.push(h("span", { class: "pill", style: { color: "var(--red)" } }, "изолятов: " + r.isolates));
+      if (r.consent.missing.length) badges.push(h("span", { class: "pill", style: { color: "var(--amber)" } },
+        "без согласия: " + r.consent.missing.length));
+      if (lowData) badges.push(lowDataPill(r.participation));
+
+      return h("div", {
+        class: "card card-pad clickable classcard" + (r.open_alerts ? " urgent" : ""),
+        onClick: function () { go("/class/" + c.id); },
+      },
+        h("div", { style: { display: "flex", alignItems: "baseline", gap: "10px", flexWrap: "wrap" } },
+          h("h3", { style: { fontSize: "17px", flex: "1", minWidth: "140px" } }, c.name),
+          h("span", { class: "muted tiny" }, r.students + " учеников")),
+        h("div", { class: "chip-row", style: { marginTop: "8px", minHeight: "26px" } },
+          badges.length ? badges : h("span", { class: "muted tiny" }, "всё спокойно")),
+        h("div", { style: { display: "flex", alignItems: "flex-end", gap: "14px", marginTop: "10px" } },
+          h("div", {},
+            h("div", { class: "tile-label", title: WI_HINT }, "Индекс связности"),
+            h("div", { class: "tile-value", style: { fontSize: "26px" }, title: WI_HINT }, wi == null ? "—" : wi)),
+          h("div", { style: { flex: "1" } },
+            h("div", { class: "muted tiny" }, needsSurvey ? "Срезов ещё не было"
+              : r.last_survey.title + " · " + fmtDate(r.last_survey.conducted_on)),
+            needsSurvey ? null : h("div", { class: "progress", style: { marginTop: "6px" } },
+              h("span", { style: { width: Math.round((r.participation || 0) * 100) + "%" } })))),
+        needsSurvey ? h("div", { class: "muted tiny", style: { marginTop: "8px", color: "var(--accent)" } },
+          "Провести первый срез") : null);
+    });
+
+    return h("div", {}, homeHeader(rows.length), h("div", { class: "class-grid" }, cards));
+  }
+
+  function homeHeader(count) {
+    return h("div", { style: { marginBottom: "18px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" } },
+      h("div", { style: { flex: "1", minWidth: "200px" } },
+        h("h1", { style: { fontSize: "22px" } }, "Мои классы"),
+        h("div", { class: "muted tiny" }, count ? "Сначала те, где нужно внимание" : "")),
+      h("button", { class: "btn btn-sm btn-primary", onClick: function () { classModal(null); } }, "+ Класс"));
+  }
+
+  /* ================================================ ВХОДЯЩИЕ: оповещения */
+  function renderAlerts() {
+    stopNetwork();
+    mount(shell(spinner()));
+    var showResolved = false;
+
+    function load() {
+      API.get("/api/alerts" + (showResolved ? "?resolved=true" : ""))
+        .then(function (d) {
+          state.unseen = d.unseen || 0;
+          mount(shell(view(d)));
+          // Открыли входящие — значок гасим, но сами оповещения остаются
+          // в работе, пока психолог не закроет каждое явно.
+          if (!showResolved && d.unseen) {
+            API.post("/api/alerts/seen").then(function () { state.unseen = 0; });
+          }
+        })
+        .catch(function (e) { mount(shell(alertBox("error", e.message))); });
+    }
+
+    function view(d) {
+      var toggle = h("button", { class: "btn btn-sm", onClick: function () { showResolved = !showResolved; load(); } },
+        showResolved ? "К активным" : "Показать закрытые");
+      var body;
+      if (!d.alerts.length) {
+        body = emptyState(
+          showResolved ? "Закрытых оповещений нет" : "Активных оповещений нет",
+          showResolved ? null : "Оповещения появляются здесь автоматически, когда вы закрываете срез.");
+      } else {
+        body = h("div", { class: "stack" }, d.alerts.map(function (a) { return alertRow(a, load, showResolved); }));
+      }
+      return h("div", {},
+        h("div", { style: { marginBottom: "18px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" } },
+          h("div", { style: { flex: "1", minWidth: "200px" } },
+            h("h1", { style: { fontSize: "22px" } }, showResolved ? "Закрытые оповещения" : "Входящие"),
+            h("div", { class: "muted tiny" }, "Система сама отмечает, у кого ухудшились связи между срезами")),
+          toggle),
+        h("div", { class: "card card-pad" }, body));
+    }
+
+    load();
+  }
+
+  function alertRow(a, reload, resolvedView) {
+    var change = a.from_value != null
+      ? h("span", { class: "muted tiny" }, "входящие связи: было " + a.from_value + ", стало " + a.to_value)
+      : (a.kind === "alone"
+          ? h("span", { class: "muted tiny" }, "номинаций «часто один»: " + a.to_value)
+          : h("span", { class: "muted tiny" }, "нет входящих выборов"));
+    // Тип сигнала — короткой подписью слева, а не значком: три разных
+    // пиктограммы психолог всё равно держал бы в голове, а слово читается сразу.
+    var mark = a.kind === "alone" ? "Одиночество" : a.kind === "isolate" ? "Изоляция" : "Спад";
+    return h("div", { class: "list-item" },
+      h("div", { class: "when" }, h("span", { class: "badge badge-red" }, mark)),
+      h("div", { class: "body" },
+        h("div", {}, h("b", {}, a.student_name), h("span", { class: "muted tiny" }, " · " + a.class_name)),
+        h("div", { style: { marginTop: "2px" } }, a.title, ". ", change),
+        h("div", { class: "muted tiny", style: { marginTop: "2px" } }, "срез «" + a.survey_title + "» · " + fmtDate(a.created_at))),
+      h("div", { style: { display: "flex", gap: "6px", flexWrap: "wrap" } },
+        h("button", { class: "btn btn-sm", onClick: function () { go("/student/" + a.student_id); } }, "Карточка"),
+        resolvedView
+          ? h("button", { class: "btn btn-sm", onClick: function () { API.post("/api/alerts/" + a.id + "/reopen").then(reload); } }, "Вернуть")
+          : h("button", { class: "btn btn-sm btn-primary", onClick: function () { API.post("/api/alerts/" + a.id + "/resolve").then(reload); } }, "Закрыть")));
+  }
+
+  /* ================================================== СВОДКА ПО ШКОЛЕ */
+  // Экран завуча. Поимённой информации здесь нет и не должно быть: для
+  // управленческого решения нужен класс, а не ребёнок.
+  function renderSchool() {
+    stopNetwork();
+    mount(shell(spinner()));
+    API.get("/api/school/summary")
+      .then(function (d) { mount(shell(schoolView(d))); })
+      .catch(function (e) { mount(shell(alertBox("error", e.message))); });
+  }
+
+  function schoolView(d) {
+    var t = d.totals;
+    var tiles = h("div", { class: "tiles" },
+      h("div", { class: "tile tile-hero" },
+        h("div", { class: "tile-label", title: WI_HINT }, "Средний индекс связности"),
+        h("div", { class: "tile-value" }, t.avg_wellbeing == null ? "—" : t.avg_wellbeing),
+        h("div", { class: "tile-sub", title: WI_HINT },
+          t.avg_wellbeing == null ? "нет закрытых срезов" : "по школе · экспериментальный")),
+      tile("Классов", t.classes, t.classes_without_surveys ? t.classes_without_surveys + " без срезов" : "все с срезами"),
+      tile("Учеников", t.students),
+      tile("Требуют внимания", t.open_alerts, "активных оповещений"),
+      tile("Профилактика", t.activities_done, "проведено · " + t.activities_planned + " в плане"),
+      tile("Без согласия", t.consent_missing, "не участвуют в срезах"));
+
+    // Главный управленческий вопрос завуча к психологу: где есть сигналы, но
+    // профилактическая работа не запланирована.
+    var gap = t.alerts_without_activities
+      ? h("div", { style: { marginTop: "12px" } }, alertBox("info",
+          "Классов с тревожными сигналами, где профилактика не запланирована: "
+          + t.alerts_without_activities + ". Это повод обсудить план с психологом."))
+      : null;
+
+    var rows = d.classes.map(function (r) {
+      return h("tr", {},
+        h("td", {}, r.class_name),
+        h("td", {}, r.psychologist || h("span", { class: "muted" }, "—")),
+        h("td", { class: "num" }, r.students),
+        h("td", {}, r.last_survey ? fmtDate(r.last_survey) : h("span", { class: "muted" }, "нет срезов")),
+        h("td", { class: "num" }, r.participation == null ? "—" : Math.round(r.participation * 100) + "%"),
+        h("td", { class: "num" }, r.wellbeing_index == null
+          ? h("span", { class: "muted", title: "Низкая явка: индекс не считается" }, "—") : r.wellbeing_index),
+        h("td", { class: "num" }, r.isolates == null ? "—" : r.isolates),
+        h("td", { class: "num" }, r.open_alerts
+          ? h("span", { class: "badge badge-red" }, String(r.open_alerts)) : h("span", { class: "muted" }, "—")),
+        h("td", { class: "num" }, (r.activities_done || 0) + " / " + ((r.activities_done || 0) + (r.activities_planned || 0))));
+    });
+
+    return h("div", {},
+      h("div", { style: { marginBottom: "18px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" } },
+        h("div", { style: { flex: "1", minWidth: "200px" } },
+          h("h1", { style: { fontSize: "22px" } }, d.school ? d.school.name : "Школа"),
+          h("div", { class: "muted tiny" }, "Сводка по классам. Персональных данных учеников на этом экране нет.")),
+        h("a", { class: "btn btn-sm", href: "/api/school/export.xlsx" + tokenQuery() }, "Выгрузить в Excel")),
+      h("div", { class: "card card-pad", style: { marginBottom: "18px" } }, tiles, gap),
+      h("div", { class: "card" },
+        h("div", { class: "card-head" }, h("h3", {}, "Классы"), h("span", { class: "spacer" }),
+          h("span", { class: "muted tiny" }, "сначала те, где нужно внимание")),
+        h("div", { class: "card-pad", style: { paddingTop: "6px" } },
+          h("div", { style: { overflowX: "auto" } }, h("table", { class: "table" },
+            h("thead", {}, h("tr", {}, h("th", {}, "Класс"), h("th", {}, "Психолог"),
+              h("th", { class: "num" }, "Учеников"), h("th", {}, "Последний срез"),
+              h("th", { class: "num" }, "Явка"), h("th", { class: "num", title: WI_HINT }, "Индекс"),
+              h("th", { class: "num" }, "Изоляты"), h("th", { class: "num" }, "Сигналы"),
+              h("th", { class: "num", title: "Проведено / всего запланировано" }, "Профилактика"))),
+            h("tbody", {}, rows))))));
+  }
+
+  /* ==================================================== СОТРУДНИКИ */
+  function renderStaff() {
+    stopNetwork();
+    mount(shell(spinner()));
+    function load() {
+      API.get("/api/auth/staff")
+        .then(function (d) { mount(shell(staffView(d, load))); })
+        .catch(function (e) { mount(shell(alertBox("error", e.message))); });
+    }
+    load();
+  }
+
+  function staffView(d, reload) {
+    var ROLES = [["psychologist", "Психолог"], ["head", "Завуч (сводка без данных детей)"], ["admin", "Администратор"]];
+    var rows = d.staff.map(function (u) {
+      var sel = h("select", { class: "select", style: { width: "auto" }, onChange: function (e) {
+        API.put("/api/auth/staff/" + u.id, { role: e.target.value }).then(reload).catch(function (err) { alert(err.message); reload(); });
+      } });
+      ROLES.forEach(function (r) { sel.appendChild(h("option", { value: r[0] }, r[1])); });
+      sel.value = u.role;
+      var self = state.user && u.id === state.user.id;
+      if (self) sel.disabled = true;
+      return h("tr", {},
+        h("td", {}, u.full_name || u.email, self ? h("span", { class: "muted tiny" }, " · это вы") : null),
+        h("td", { class: "muted" }, u.email),
+        h("td", {}, sel),
+        h("td", {}, u.last_login_at ? fmtDate(u.last_login_at) : h("span", { class: "muted" }, "не заходил")),
+        h("td", { class: "num" }, self ? h("span", { class: "muted tiny" }, "—")
+          : [h("button", {
+              class: "btn btn-sm", title: "Выдать временный пароль",
+              onClick: function () {
+                if (!confirm("Сбросить пароль для «" + (u.full_name || u.email) + "»?\n\nВсе его текущие сессии будут завершены."))
+                  return;
+                API.post("/api/auth/staff/" + u.id + "/reset-password")
+                  .then(function (d) {
+                    prompt("Временный пароль для " + d.email
+                      + "\n\nПередайте его лично и попросите сменить при первом входе:", d.temporary_password);
+                    reload();
+                  })
+                  .catch(function (e) { alert(e.message); });
+              },
+            }, "Сбросить пароль"),
+            h("button", { class: "btn btn-sm " + (u.is_active ? "btn-danger" : "btn-primary"), onClick: function () {
+              API.put("/api/auth/staff/" + u.id, { is_active: !u.is_active }).then(reload);
+            } }, u.is_active ? "Отключить" : "Включить")]));
+    });
+
+    var inviteIn = h("input", { class: "input mono", value: d.invite_code || "" });
+    inviteIn.setAttribute("readonly", "");
+
+    return h("div", {},
+      h("h1", { style: { fontSize: "22px", marginBottom: "4px" } }, "Сотрудники школы"),
+      h("div", { class: "muted tiny", style: { marginBottom: "18px" } },
+        "Завуч видит только сводку по классам. Карточки учеников и имена ему недоступны."),
+      h("div", { class: "card card-pad", style: { marginBottom: "18px" } },
+        h("div", { class: "section-title" }, "Код приглашения"),
+        h("p", { class: "muted tiny", style: { marginBottom: "8px" } },
+          "Передайте его сотруднику. По нему он зарегистрируется именно в вашей школе. Без кода регистрация невозможна."),
+        h("div", { class: "row" }, inviteIn,
+          h("button", { class: "btn", onClick: function () { inviteIn.select(); try { document.execCommand("copy"); } catch (e) {} } }, "Копировать"))),
+      h("div", { class: "card" },
+        h("div", { class: "card-head" }, h("h3", {}, "Доступы")),
+        h("div", { class: "card-pad", style: { paddingTop: "6px" } },
+          h("div", { style: { overflowX: "auto" } }, h("table", { class: "table" },
+            h("thead", {}, h("tr", {}, h("th", {}, "Сотрудник"), h("th", {}, "E-mail"),
+              h("th", {}, "Роль"), h("th", {}, "Последний вход"), h("th", {}))),
+            h("tbody", {}, rows))))));
+  }
+
+  /* ============================================ ПРОФИЛАКТИЧЕСКАЯ РАБОТА */
+  // Граф сам по себе ничего не меняет. Этот экран — про то, что психолог
+  // делает по его итогам: план занятий, отметка о проведении, охват и
+  // сравнение «до/после». Это же его отчётность перед завучем.
+  function renderPrevention() {
+    stopNetwork();
+    mount(shell(spinner()));
+    var filter = "";
+    function load() {
+      API.get("/api/prevention/schedule" + (filter ? "?status=" + filter : ""))
+        .then(function (d) { mount(shell(view(d))); })
+        .catch(function (e) { mount(shell(alertBox("error", e.message))); });
+    }
+
+    function view(d) {
+      var t = d.totals;
+      var tiles = h("div", { class: "tiles" },
+        tile("Запланировано", t.planned, t.overdue ? t.overdue + " просрочено" : "по всем классам"),
+        tile("Проведено", t.done, "мероприятий"),
+        tile("Охват учеников", t.students_covered, "уникальных"),
+        tile("Родители и педагоги", t.adults_covered, "участников"));
+
+      var tabs = h("div", { class: "toolbar" },
+        ["", "planned", "done", "cancelled"].map(function (s) {
+          var label = s === "" ? "Все" : s === "planned" ? "В плане" : s === "done" ? "Проведённые" : "Отменённые";
+          return h("button", {
+            class: "btn btn-sm" + (filter === s ? " btn-primary" : ""),
+            onClick: function () { filter = s; load(); },
+          }, label);
+        }));
+
+      var body = d.activities.length
+        ? h("div", { class: "stack" }, d.activities.map(function (a) { return activityRow(a, load); }))
+        : emptyState("Мероприятий нет",
+            "Откройте класс и нажмите «Профилактика». Система предложит, с чего начать, по данным последнего среза.");
+
+      return h("div", {},
+        h("div", { style: { marginBottom: "18px" } },
+          h("h1", { style: { fontSize: "22px" } }, "Профилактическая работа"),
+          h("div", { class: "muted tiny" }, "План, проведение и охват по всем вашим классам")),
+        h("div", { class: "card card-pad", style: { marginBottom: "18px" } }, tiles),
+        h("div", { class: "card" },
+          h("div", { class: "card-head" }, h("h3", {}, "Мероприятия"), h("span", { class: "spacer" }), tabs),
+          h("div", { class: "card-pad" }, body)));
+    }
+    load();
+  }
+
+  function activityRow(a, reload) {
+    var status = a.status === "done"
+      ? h("span", { class: "pill badge-green" }, "проведено")
+      : a.status === "cancelled"
+        ? h("span", { class: "pill muted" }, "отменено")
+        : a.overdue
+          ? h("span", { class: "pill", style: { color: "var(--red)", borderColor: "var(--red)" } }, "просрочено")
+          : h("span", { class: "pill" }, "в плане");
+
+    var when = a.status === "done"
+      ? "проведено " + fmtDate(a.conducted_on)
+      : "запланировано на " + fmtDate(a.planned_on);
+
+    var coverage = a.target === "adults"
+      ? (a.adults_count ? a.adults_count + " участников" : null)
+      : (a.status === "done" ? "охват: " + a.attended_count + " учеников" : null);
+
+    var actions = [];
+    if (a.status === "planned") {
+      actions.push(h("button", { class: "btn btn-sm btn-primary", onClick: function () { completeModal(a, reload); } }, "Отметить проведение"));
+      actions.push(h("button", { class: "btn btn-sm", onClick: function () { activityModal(a.class_id, a, reload); } }, "Изменить"));
+      actions.push(h("button", { class: "btn btn-sm", title: "Отменить", onClick: function () {
+        if (confirm("Отменить мероприятие «" + a.title + "»?")) API.post("/api/prevention/activities/" + a.id + "/cancel").then(reload);
+      } }, "Удалить"));
+    } else if (a.status === "done") {
+      actions.push(h("button", { class: "btn btn-sm", onClick: function () { effectModal(a); } }, "Оценка эффекта"));
+    }
+    actions.push(h("button", { class: "btn btn-danger btn-sm", title: "Удалить", onClick: function () {
+      if (confirm("Удалить мероприятие «" + a.title + "» из журнала?")) API.del("/api/prevention/activities/" + a.id).then(reload);
+    } }, "Удалить"));
+
+    return h("div", { class: "list-item", style: { alignItems: "flex-start" } },
+      h("div", { class: "body" },
+        h("div", { style: { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" } },
+          h("b", {}, a.title), status,
+          h("span", { class: "pill" }, a.kind_title)),
+        h("div", { class: "muted tiny", style: { marginTop: "4px" } },
+          [a.class_name, a.target_title, when, coverage].filter(Boolean).join(" · ")),
+        a.goal ? h("div", { class: "muted", style: { marginTop: "6px", fontSize: "13px" } }, a.goal) : null,
+        a.outcome ? h("div", { style: { marginTop: "6px", fontSize: "13px" } }, h("b", {}, "Итог: "), a.outcome) : null,
+        a.effectiveness ? h("div", { style: { marginTop: "4px" } }, stars(a.effectiveness)) : null),
+      h("div", { style: { display: "flex", gap: "6px", flexWrap: "wrap" } }, actions));
+  }
+
+  // Рекомендации по данным среза + план класса. Открывается из карточки класса.
+  function preventionModal(classId) {
+    var wrap = h("div", spinner());
+    var close = openModal("Профилактика — " + (dash.cls ? dash.cls.name : "класс"), [wrap],
+      [h("button", { class: "btn btn-primary", onClick: function () { close(); } }, "Закрыть")], true);
+
+    function reload() {
+      Promise.all([
+        API.get("/api/prevention/classes/" + classId + "/recommendations"),
+        API.get("/api/prevention/classes/" + classId + "/activities"),
+      ]).then(function (res) { wrap.replaceChildren(body(res[0], res[1].activities)); })
+        .catch(function (e) { wrap.replaceChildren(alertBox("error", e.message)); });
+    }
+
+    function body(rec, activities) {
+      var recBlock;
+      if (!rec.available) {
+        recBlock = alertBox("info", rec.reason);
+      } else if (!rec.items.length) {
+        recBlock = alertBox("ok", "По последнему срезу тревожных признаков нет. "
+          + "Срочных мероприятий система не предлагает. Плановые занятия можно добавить вручную.");
+      } else {
+        recBlock = h("div", { class: "stack" }, rec.items.map(function (item) {
+          return h("div", { class: "card card-pad", style: { borderColor: "var(--border-strong)" } },
+            h("div", { style: { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" } },
+              h("b", {}, item.title),
+              h("span", { class: "pill" }, item.reason)),
+            h("div", { class: "muted", style: { marginTop: "6px", fontSize: "13px" } }, item.goal),
+            item.pairs && item.pairs.length
+              ? h("div", { style: { marginTop: "8px" } },
+                  h("div", { class: "section-title" }, "Кого с кем объединить"),
+                  h("div", { class: "chip-row" }, item.pairs.map(function (p) {
+                    return h("span", { class: "pill" }, p.partner_name
+                      ? p.student_name + " и " + p.partner_name
+                      : p.student_name + ": пару подобрать вручную");
+                  })))
+              : null,
+            h("details", { style: { marginTop: "8px" } },
+              h("summary", { class: "muted tiny", style: { cursor: "pointer" } }, "Ход занятия"),
+              h("pre", { class: "plan-text" }, item.plan)),
+            h("div", { style: { marginTop: "10px" } },
+              h("button", { class: "btn btn-sm btn-primary", onClick: function () {
+                activityModal(classId, null, function () { reload(); }, item, rec.survey);
+              } }, "Запланировать")));
+        }));
+      }
+
+      var planBlock = activities.length
+        ? h("div", { class: "stack" }, activities.map(function (a) {
+            a.class_name = dash.cls ? dash.cls.name : "";
+            return activityRow(a, reload);
+          }))
+        : h("span", { class: "muted tiny" }, "Пока ничего не запланировано.");
+
+      return h("div", {},
+        h("div", { class: "section-title" }, "Что предлагает система"),
+        rec.survey ? h("div", { class: "muted tiny", style: { marginBottom: "8px" } },
+          "По срезу «" + rec.survey.title + "» от " + fmtDate(rec.survey.conducted_on)) : null,
+        recBlock,
+        h("div", { class: "section-title", style: { marginTop: "18px" } }, "План класса"),
+        h("div", { style: { marginBottom: "8px" } },
+          h("button", { class: "btn btn-sm", onClick: function () { activityModal(classId, null, reload); } },
+            "+ Своё мероприятие")),
+        planBlock);
+    }
+
+    reload();
+  }
+
+  // Создание/правка мероприятия. tmpl — заготовка из рекомендаций.
+  function activityModal(classId, activity, onDone, tmpl, survey) {
+    var src = activity || tmpl || {};
+    var titleIn = h("input", { class: "input", value: src.title || "" });
+    var goalIn = h("textarea", { class: "textarea", value: src.goal || "" });
+    var planIn = h("textarea", { class: "textarea", style: { minHeight: "160px" }, value: src.plan || "" });
+    var dateIn = h("input", { class: "input", type: "date",
+      value: (activity && activity.planned_on) || new Date().toISOString().slice(0, 10) });
+    var durIn = h("input", { class: "input", type: "number", min: "5", step: "5",
+      value: (activity && activity.duration_min) || 45 });
+
+    var kindIn = h("select", { class: "select" });
+    KINDS.forEach(function (k) { kindIn.appendChild(h("option", { value: k[0] }, k[1])); });
+    kindIn.value = src.kind || "training";
+
+    var targetIn = h("select", { class: "select" });
+    TARGETS.forEach(function (k) { targetIn.appendChild(h("option", { value: k[0] }, k[1])); });
+    targetIn.value = src.target || "class";
+
+    // Состав участников нужен только для подгруппы и отдельного ученика:
+    // для мероприятия на весь класс он подставится на момент проведения.
+    var pickWrap = h("div");
+    var picks = [];
+    function renderPicks() {
+      var need = targetIn.value === "group" || targetIn.value === "student";
+      if (!need) {
+        pickWrap.replaceChildren(h("span", { class: "muted tiny" },
+          targetIn.value === "class"
+            ? "Охват — весь класс на момент проведения, отмечать никого не нужно."
+            : "Мероприятие для взрослых: число участников укажете при отметке о проведении."));
+        return;
+      }
+      var preset = {};
+      ((activity && activity.participants) || []).forEach(function (p) { preset[p.student_id] = true; });
+      (src.student_ids || []).forEach(function (id) { preset[id] = true; });
+      picks = (dash.students || []).filter(function (s) { return s.is_active; }).map(function (s) {
+        var cb = h("input", { type: "checkbox" });
+        cb.checked = !!preset[s.id];
+        return { id: s.id, cb: cb, row: h("label", { class: "check" }, cb, s.full_name) };
+      });
+      pickWrap.replaceChildren(h("div", { class: "stack", style: { gap: "2px" } },
+        picks.map(function (p) { return p.row; })));
+    }
+    targetIn.addEventListener("change", renderPicks);
+    renderPicks();
+
+    var err = h("div");
+    var close;
+    function save() {
+      var title = titleIn.value.trim();
+      if (!title) { err.replaceChildren(alertBox("error", "Укажите название")); return; }
+      var ids = null;
+      if (targetIn.value === "group" || targetIn.value === "student") {
+        ids = picks.filter(function (p) { return p.cb.checked; }).map(function (p) { return p.id; });
+        if (!ids.length) { err.replaceChildren(alertBox("error", "Выберите хотя бы одного ученика")); return; }
+      }
+      var payload = {
+        title: title, kind: kindIn.value, target: targetIn.value,
+        goal: goalIn.value.trim(), plan: planIn.value.trim(),
+        planned_on: dateIn.value, duration_min: Number(durIn.value) || null,
+        student_ids: ids,
+      };
+      if (!activity && survey) payload.source_survey_id = survey.id;
+      var p = activity
+        ? API.put("/api/prevention/activities/" + activity.id, payload)
+        : API.post("/api/prevention/classes/" + classId + "/activities", payload);
+      return p.then(function () { close(); if (onDone) onDone(); })
+       .catch(function (e) { err.replaceChildren(alertBox("error", e.message)); });
+    }
+
+    close = openModal(activity ? "Мероприятие" : "Новое мероприятие",
+      [err, field("Название", titleIn),
+       h("div", { class: "two-col" }, field("Вид", kindIn), field("Для кого", targetIn)),
+       h("div", { class: "two-col" }, field("Дата", dateIn), field("Длительность, мин", durIn)),
+       field("Цель", goalIn),
+       field("Ход занятия", planIn),
+       h("div", { class: "section-title", style: { marginTop: "6px" } }, "Участники"),
+       pickWrap],
+      [h("button", { class: "btn", onClick: function () { close(); } }, "Отмена"),
+       asyncBtn({ class: "btn btn-primary", onClick: save }, "Сохранить")], true);
+  }
+
+  function completeModal(activity, onDone) {
+    var dateIn = h("input", { class: "input", type: "date", value: new Date().toISOString().slice(0, 10) });
+    var outIn = h("textarea", { class: "textarea", placeholder: "Что получилось, как реагировал класс" });
+    var effIn = h("select", { class: "select" }, h("option", { value: "" }, "не оценивать"));
+    var EFF = ["1 — не сработало", "2 — слабый результат", "3 — умеренный",
+               "4 — заметный результат", "5 — задача решена"];
+    EFF.forEach(function (label, i) { effIn.appendChild(h("option", { value: String(i + 1) }, label)); });
+    var adultsIn = h("input", { class: "input", type: "number", min: "0",
+      value: activity.adults_count || "" });
+    var err = h("div");
+
+    // Для взрослых охват — числом: поимённо родителей мы не заводим.
+    var isAdults = activity.target === "adults";
+    var picks = [];
+    var pickWrap = h("div");
+    if (!isAdults) {
+      var pool = activity.participants.length
+        ? activity.participants.map(function (p) { return { id: p.student_id, full_name: p.full_name }; })
+        : (dash.students || []).filter(function (s) { return s.is_active; });
+      picks = pool.map(function (s) {
+        var cb = h("input", { type: "checkbox" });
+        cb.checked = true;
+        return { id: s.id, cb: cb, row: h("label", { class: "check" }, cb, s.full_name) };
+      });
+      pickWrap.replaceChildren(
+        picks.length
+          ? h("div", { class: "stack", style: { gap: "2px" } }, picks.map(function (p) { return p.row; }))
+          : h("span", { class: "muted tiny" }, "Охват — весь класс на момент проведения."));
+    }
+
+    var close;
+    function save() {
+      var payload = {
+        conducted_on: dateIn.value,
+        outcome: outIn.value.trim(),
+        effectiveness: effIn.value ? Number(effIn.value) : null,
+      };
+      if (isAdults) payload.adults_count = Number(adultsIn.value) || 0;
+      else if (picks.length) payload.attended_ids = picks.filter(function (p) { return p.cb.checked; })
+        .map(function (p) { return p.id; });
+      return API.post("/api/prevention/activities/" + activity.id + "/complete", payload)
+        .then(function () { close(); onDone(); })
+        .catch(function (e) { err.replaceChildren(alertBox("error", e.message)); });
+    }
+
+    close = openModal("Проведено — " + activity.title,
+      [err, field("Дата проведения", dateIn),
+       isAdults ? field("Сколько участников", adultsIn) : null,
+       field("Что получилось", outIn),
+       field("Ваша оценка результата", effIn),
+       isAdults ? null : h("div", {},
+         h("div", { class: "section-title", style: { marginTop: "6px" } }, "Кто присутствовал"),
+         h("p", { class: "muted tiny", style: { marginBottom: "6px" } },
+           "Снимите отметку с тех, кого не было. Охват считается по фактически присутствовавшим."),
+         pickWrap)],
+      [h("button", { class: "btn", onClick: function () { close(); } }, "Отмена"),
+       asyncBtn({ class: "btn btn-primary", onClick: save }, "Сохранить")], true);
+  }
+
+  function effectModal(activity) {
+    var wrap = h("div", spinner());
+    var close = openModal("Эффект — " + activity.title, [wrap],
+      [h("button", { class: "btn btn-primary", onClick: function () { close(); } }, "Закрыть")], true);
+
+    API.get("/api/prevention/activities/" + activity.id + "/effect").then(function (d) {
+      if (!d.available) { wrap.replaceChildren(alertBox("info", d.reason)); return; }
+
+      function block(title, s) {
+        if (!s) return h("div", { class: "muted tiny" }, title + ": нет данных");
+        return h("div", { class: "card card-pad" },
+          h("div", { class: "section-title" }, title + " (" + s.students + ")"),
+          h("div", { class: "tiles" },
+            tile("Входящие связи", (s.avg_in_delta > 0 ? "+" : "") + s.avg_in_delta, "в среднем"),
+            tile("Взаимные", (s.avg_mutual_delta > 0 ? "+" : "") + s.avg_mutual_delta, "в среднем"),
+            tile("Вышли из изоляции", s.left_isolation),
+            tile("Стали изолятами", s.became_isolate)));
+      }
+
+      var rows = d.details.map(function (r) {
+        return h("tr", { class: "clickable", onClick: function () { close(); go("/student/" + r.student_id); } },
+          h("td", {}, r.full_name),
+          h("td", { class: "num" }, r.in_before), h("td", { class: "num" }, r.in_after),
+          h("td", { class: "num" }, deltaSpan(r.in_delta)),
+          h("td", {}, r.was_isolate && !r.is_isolate
+            ? h("span", { class: "badge badge-green" }, "вышел из изоляции")
+            : !r.was_isolate && r.is_isolate
+              ? h("span", { class: "badge badge-red" }, "стал изолятом")
+              : h("span", { class: "muted" }, "—")));
+      });
+
+      wrap.replaceChildren(h("div", {},
+        h("div", { class: "muted tiny", style: { marginBottom: "12px" } },
+          "Сравнение срезов «" + d.before.title + "» (" + fmtDate(d.before.conducted_on) + ") и «"
+          + d.after.title + "» (" + fmtDate(d.after.conducted_on) + ")"),
+        h("div", { class: "two-col", style: { gap: "12px" } },
+          block("Охваченные мероприятием", d.covered),
+          block("Остальной класс", d.rest_of_class)),
+        // Честная оговорка: без неё цифры читались бы как доказательство.
+        h("div", { style: { marginTop: "12px" } }, alertBox("info", d.disclaimer)),
+        d.details.length ? h("div", { style: { overflowX: "auto", marginTop: "12px" } },
+          h("table", { class: "table" },
+            h("thead", {}, h("tr", {}, h("th", {}, "Ученик"), h("th", { class: "num" }, "Вх. до"),
+              h("th", { class: "num" }, "Вх. после"), h("th", { class: "num" }, "Δ"), h("th", {}, "Изменение"))),
+            h("tbody", {}, rows))) : null));
+    }).catch(function (e) { wrap.replaceChildren(alertBox("error", e.message)); });
+  }
+
+  /* ================================================ ЖУРНАЛ ДОСТУПА */
+  // Журнал, который нельзя прочитать, бесполезен: смысл в том, чтобы ответить
+  // на вопрос проверки «кто и когда открывал данные этого ребёнка».
+  function renderAudit() {
+    stopNetwork();
+    mount(shell(spinner()));
+    var days = 30;
+    function load() {
+      API.get("/api/audit?days=" + days)
+        .then(function (d) { mount(shell(view(d))); })
+        .catch(function (e) { mount(shell(alertBox("error", e.message))); });
+    }
+    function view(d) {
+      var sel = h("select", { class: "select", style: { width: "auto" },
+        onChange: function (e) { days = Number(e.target.value); load(); } },
+        h("option", { value: "7" }, "7 дней"),
+        h("option", { value: "30" }, "30 дней"),
+        h("option", { value: "90" }, "90 дней"),
+        h("option", { value: "365" }, "год"));
+      sel.value = String(days);
+
+      var body = d.entries.length
+        ? h("div", { style: { overflowX: "auto" } }, h("table", { class: "table" },
+            h("thead", {}, h("tr", {}, h("th", {}, "Когда"), h("th", {}, "Кто"),
+              h("th", {}, "Действие"), h("th", {}, "Объект"), h("th", {}, "IP"))),
+            h("tbody", {}, d.entries.map(function (e) {
+              return h("tr", {},
+                h("td", { class: "muted tiny" }, fmtDateTime(e.at)),
+                h("td", {}, e.who),
+                h("td", {}, e.action_title),
+                h("td", {}, e.target_name),
+                h("td", { class: "muted tiny mono" }, e.ip || "—"));
+            }))))
+        : emptyState("Записей нет", "За выбранный период никто не открывал персональные данные.");
+
+      return h("div", {},
+        h("div", { style: { marginBottom: "18px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" } },
+          h("div", { style: { flex: "1", minWidth: "200px" } },
+            h("h1", { style: { fontSize: "22px" } }, "Журнал доступа"),
+            h("div", { class: "muted tiny" }, "Кто и когда открывал персональные данные учеников вашей школы")),
+          sel),
+        h("div", { class: "card card-pad" }, body));
+    }
+    load();
+  }
+
+  /* ======================================================= АККАУНТ */
+  function accountModal() {
+    var cur = h("input", { class: "input", type: "password" });
+    var next = h("input", { class: "input", type: "password", placeholder: "минимум 8 символов" });
+    var msg = h("div");
+    var close;
+    function save() {
+      msg.replaceChildren();
+      if (next.value.length < 8) { msg.replaceChildren(alertBox("error", "Новый пароль — минимум 8 символов")); return; }
+      return API.post("/api/auth/password", { current_password: cur.value, new_password: next.value })
+        .then(function (d) {
+          localStorage.setItem("izolyat.token", d.token);
+          close();
+          alert("Пароль изменён. Остальные сессии завершены.");
+        })
+        .catch(function (e) { msg.replaceChildren(alertBox("error", e.message)); });
+    }
+    close = openModal("Аккаунт",
+      [h("div", { class: "muted tiny", style: { marginBottom: "10px" } },
+        state.user.email + (state.user.school_name ? " · " + state.user.school_name : "") + " · " + (ROLE_LABEL[role()] || "")),
+       h("div", { class: "section-title" }, "Смена пароля"),
+       h("p", { class: "muted tiny", style: { marginBottom: "8px" } },
+         "После смены пароля все остальные входы завершаются, в том числе на школьном компьютере."),
+       msg, field("Текущий пароль", cur), field("Новый пароль", next)],
+      [h("button", { class: "btn", onClick: function () { close(); } }, "Отмена"),
+       asyncBtn({ class: "btn btn-primary", onClick: save }, "Сменить пароль")]);
+  }
+
+  // Скачивание файла идёт обычной ссылкой, а не fetch, поэтому токен нельзя
+  // положить в заголовок — передаём его в query. Эндпоинты экспорта принимают
+  // оба способа.
+  function tokenQuery() {
+    var t = localStorage.getItem("izolyat.token");
+    return t ? "?token=" + encodeURIComponent(t) : "";
+  }
+
   function router() {
     var parts = (location.hash.slice(1) || "/").split("/").filter(Boolean);
     if (!state.user) { renderLogin(); return; }
-    if (parts.length === 0) { renderDashboard(); return; }
+
     if (parts[0] === "student" && parts[1]) { renderStudent(Number(parts[1])); return; }
-    renderDashboard();
+    if (parts[0] === "class" && parts[1]) { setClass(Number(parts[1])); return; }
+    if (parts[0] === "alerts") { renderAlerts(); return; }
+    if (parts[0] === "prevention") { renderPrevention(); return; }
+    if (parts[0] === "school") { renderSchool(); return; }
+    if (parts[0] === "staff") { renderStaff(); return; }
+    if (parts[0] === "audit") { renderAudit(); return; }
+
+    // Завуч классов не ведёт — его домашний экран это сводка по школе.
+    if (!canCasework() && canSchool()) { renderSchool(); return; }
+    renderHome();
   }
   window.addEventListener("hashchange", router);
 
@@ -1128,5 +2412,6 @@
   mount(spinner());
   var token = localStorage.getItem("izolyat.token");
   (token ? API.get("/api/auth/me").then(function (d) { state.user = d.user; }).catch(function () { state.user = null; }) : Promise.resolve())
+    .then(refreshUnseen)
     .then(function () { router(); });
 })();

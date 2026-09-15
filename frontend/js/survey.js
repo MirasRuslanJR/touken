@@ -1,7 +1,66 @@
-/* Изолят — страница прохождения опроса учеником (анонимно, по коду). */
+/* Изолят — страница прохождения опроса учеником.
+ *
+ * Два языка, русский и казахский. Это не украшение: в НИШ и региональных
+ * школах часть класса думает и отвечает на казахском, а неточно понятый
+ * вопрос портит сами данные, ради которых всё и делается. Выбранный язык
+ * запоминается, чтобы ученику не переключать его на каждом экране.
+ */
 (function () {
   "use strict";
 
+  /* --------------------------------------------------------------- язык */
+  var STRINGS = {
+    ru: {
+      anon: "анонимный опрос",
+      enterCode: "Введите ваш код",
+      codePlaceholder: "Например, K7P2QT",
+      start: "Начать опрос",
+      privacy: "Одноклассники не увидят твои ответы. Психолог видит общую картину класса: кто с кем дружит. А кого ты отметил как одинокого, не увидит никто, даже он.",
+      linkBad: "Ссылка на опрос недействительна.",
+      closed: "Этот опрос сейчас закрыт.",
+      question: "Вопрос",
+      of: "из",
+      pick: "Можно выбрать до",
+      picked: "Выбрано:",
+      back: "Назад",
+      next: "Далее",
+      send: "Отправить ответы",
+      thanks: "Спасибо!",
+      done: "Ваши ответы записаны. Повторно пройти опрос нельзя.",
+      skip: "Пропустить вопрос",
+    },
+    kk: {
+      anon: "анонимді сауалнама",
+      enterCode: "Кодыңызды енгізіңіз",
+      codePlaceholder: "Мысалы, K7P2QT",
+      start: "Сауалнаманы бастау",
+      privacy: "Сыныптастарың жауаптарыңды көрмейді. Психолог сыныптың жалпы көрінісін көреді: кім кіммен дос екенін. Ал сен кімді жалғыз деп белгілегеніңді ешкім көрмейді.",
+      linkBad: "Сауалнама сілтемесі жарамсыз.",
+      closed: "Бұл сауалнама қазір жабық.",
+      question: "Сұрақ",
+      of: "/",
+      pick: "Ең көбі таңдауға болады:",
+      picked: "Таңдалды:",
+      back: "Артқа",
+      next: "Әрі қарай",
+      send: "Жауаптарды жіберу",
+      thanks: "Рахмет!",
+      done: "Жауаптарың жазылды. Сауалнаманы қайта өтуге болмайды.",
+      skip: "Сұрақты өткізіп жіберу",
+    },
+  };
+
+  var lang = "ru";
+  try {
+    var saved = localStorage.getItem("izolyat.lang");
+    if (saved && STRINGS[saved]) lang = saved;
+    else if ((navigator.language || "").toLowerCase().indexOf("kk") === 0) lang = "kk";
+  } catch (e) { /* приватный режим — остаёмся на русском */ }
+
+  function t(key) { return STRINGS[lang][key]; }
+  function qText(q) { return lang === "kk" ? (q.text_kk || q.text) : q.text; }
+
+  /* --------------------------------------------------------------- DOM */
   // Рекурсивно добавляет ребёнка (узел, строку/число, вложенный массив, либо
   // null/false — пропускается). Рекурсия важна: массивы могут быть вложенными
   // (например, список блоков внутри списка детей), и без неё appendChild
@@ -50,6 +109,13 @@
         if (!r.ok) throw new Error((d && d.detail) || ("Ошибка " + r.status));
         return d;
       });
+    }, function () {
+      // Ученик проходит опрос с телефона по школьному Wi-Fi — обрыв связи
+      // здесь обычное дело. Браузерное «Failed to fetch» ему ничего не скажет,
+      // а бросать ответы на полпути нельзя: он их уже ввёл.
+      throw new Error(lang === "kk"
+        ? "Байланыс жоқ. Wi-Fi тексеріп, қайта жіберіп көріңіз."
+        : "Нет связи. Проверьте Wi-Fi и попробуйте отправить ещё раз.");
     });
   }
 
@@ -67,13 +133,36 @@
     return (((p[0] || "")[0] || "") + ((p[1] || "")[0] || "")).toUpperCase();
   }
 
+  // Переключатель языка. Перерисовываем текущий экран заново, чтобы перевод
+  // применился и к уже показанным вопросам.
+  var rerender = function () {};
+  function langSwitch() {
+    function btn(code, label) {
+      return h("button", {
+        class: "lang-btn" + (lang === code ? " on" : ""),
+        type: "button",
+        onClick: function () {
+          if (lang === code) return;
+          lang = code;
+          try { localStorage.setItem("izolyat.lang", code); } catch (e) {}
+          rerender();
+        },
+      }, label);
+    }
+    return h("div", { class: "lang-switch" }, btn("ru", "Рус"), btn("kk", "Қаз"));
+  }
+
   function boot() {
-    if (!surveyId) { mount(card(showError("Ссылка на опрос недействительна."))); return; }
+    if (!surveyId) { mount(card(showError(t("linkBad")))); return; }
     mount(h("div", { class: "spinner" }));
     api("GET", "/api/public/surveys/" + surveyId + "/info")
       .then(function (info) {
         if (!info.is_open) {
-          mount(card([h("h2", { style: "font-size:20px;margin-bottom:8px" }, info.title || "Опрос"), showError("Этот опрос сейчас закрыт.")]));
+          rerender = function () {
+            mount(card([h("h2", { style: "font-size:20px;margin-bottom:8px" }, info.title || "Опрос"),
+                        showError(t("closed")), langSwitch()]));
+          };
+          rerender();
           return;
         }
         renderIntro(info);
@@ -82,31 +171,49 @@
   }
 
   function renderIntro(info) {
-    var codeIn = h("input", { class: "input", placeholder: "Например, K7P2QT", style: "text-align:center;text-transform:uppercase;letter-spacing:4px;font-weight:800;font-size:18px" });
-    var msg = h("div");
-    var btn = h("button", { class: "btn btn-primary btn-lg", style: "width:100%" }, "Начать опрос →");
-    function start() {
-      var code = codeIn.value.trim().toUpperCase();
-      if (!code) return;
-      clear(msg);
-      btn.disabled = true;
-      api("POST", "/api/public/surveys/" + surveyId + "/start", { code: code })
-        .then(function (data) { renderQuestions(code, data); })
-        .catch(function (e) { setContent(msg, showError(e.message)); btn.disabled = false; });
+    var codeValue = "";
+    rerender = function () { draw(); };
+
+    function draw() {
+      var codeIn = h("input", {
+        class: "input", placeholder: t("codePlaceholder"), value: codeValue,
+        style: "text-align:center;text-transform:uppercase;letter-spacing:4px;font-weight:800;font-size:18px",
+      });
+      codeIn.addEventListener("input", function () { codeValue = codeIn.value; });
+      var msg = h("div");
+      var btn = h("button", { class: "btn btn-primary btn-lg", style: "width:100%" }, t("start"));
+
+      function start() {
+        var code = codeIn.value.trim().toUpperCase();
+        if (!code) return;
+        clear(msg);
+        btn.disabled = true;
+        api("POST", "/api/public/surveys/" + surveyId + "/start", { code: code })
+          .then(function (data) { renderQuestions(code, data); })
+          .catch(function (e) { setContent(msg, showError(e.message)); btn.disabled = false; });
+      }
+      codeIn.addEventListener("keydown", function (e) { if (e.key === "Enter") start(); });
+      btn.addEventListener("click", start);
+
+      mount(h("div", {},
+        langSwitch(),
+        h("div", { class: "survey-hero" },
+          h("div", { class: "hicon" }, "И"),
+          h("h1", {}, info.title),
+          h("div", { class: "sub" }, t("anon"))),
+        card([
+          h("div", { class: "field", style: "margin-bottom:14px" },
+            h("label", { style: "text-align:center" }, t("enterCode")), codeIn),
+          msg, btn,
+          // Текст описывает ровно то, что делает система. Раньше здесь стояло
+          // «Ответы анонимны», хотя психолог видел поимённо и кто кого выбрал,
+          // и кто кого назвал одиноким. Первое — неизбежная часть социометрии
+          // (из этого и строится граф класса), второе убрано полностью.
+          h("p", { class: "muted tiny", style: "margin-top:16px;text-align:center" }, t("privacy")),
+        ])));
+      codeIn.focus();
     }
-    codeIn.addEventListener("keydown", function (e) { if (e.key === "Enter") start(); });
-    btn.addEventListener("click", start);
-    mount(h("div", {},
-      h("div", { class: "survey-hero" },
-        h("div", { class: "hicon" }, "И"),
-        h("h1", {}, info.title),
-        h("div", { class: "sub" }, info.class_name + " · анонимный опрос")),
-      card([
-        h("div", { class: "field", style: "margin-bottom:14px" },
-          h("label", { style: "text-align:center" }, "Введите ваш код"), codeIn),
-        msg, btn,
-        h("p", { class: "muted tiny", style: "margin-top:16px;text-align:center" }, "🔒 Ответы анонимны. Другие ученики их не видят.")
-      ])));
+    draw();
   }
 
   // Пошаговый опрос: по одному вопросу на экран, с кнопками «Назад»/«Далее».
@@ -117,49 +224,76 @@
     var step = 0;
     var msg = h("div");
 
-    var bar = h("span");
-    var lbl = h("span", { class: "lbl" });
-    var progress = h("div", { class: "survey-progress" }, lbl, h("div", { class: "bar" }, bar));
-    var stepHost = h("div");
+    var bar, lbl, progress, stepHost;
+
+    function shell() {
+      bar = h("span");
+      lbl = h("span", { class: "lbl" });
+      progress = h("div", { class: "survey-progress" }, lbl, h("div", { class: "bar" }, bar));
+      stepHost = h("div");
+      mount(h("div", {},
+        langSwitch(),
+        h("div", { style: "text-align:center;margin-bottom:16px" },
+          h("h1", { style: "font-size:21px;letter-spacing:-0.02em" }, data.title),
+          h("div", { class: "muted", style: "font-size:14px;margin-top:4px" }, data.class_name)),
+        progress,
+        stepHost,
+        msg));
+    }
+
+    // Флаг, а не только disabled на кнопке: переключение языка перерисовывает
+    // экран и создаёт новую кнопку — без флага ученик мог отправить ответы
+    // второй раз, пока идёт первый запрос, и получить 409 «вы уже проходили».
+    var sending = false;
 
     function submit(btn) {
+      if (sending) return;
+      sending = true;
       clear(msg);
       btn.disabled = true;
       var answers = {};
       Object.keys(selections).forEach(function (k) { answers[k] = Array.from(selections[k]); });
       api("POST", "/api/public/surveys/" + surveyId + "/submit", { code: code, answers: answers })
         .then(function () { renderDone(); })
-        .catch(function (e) { setContent(msg, showError(e.message)); btn.disabled = false; });
+        .catch(function (e) {
+          sending = false;
+          setContent(msg, showError(e.message));
+          btn.disabled = false;
+        });
     }
 
     function renderStep() {
       var q = data.questions[step];
       var set = selections[q.key];
-      lbl.textContent = "Вопрос " + (step + 1) + " из " + total;
+      lbl.textContent = t("question") + " " + (step + 1) + " " + t("of") + " " + total;
       bar.style.width = Math.round((step + 1) / total * 100) + "%";
 
-      var qcard = h("div", { class: "q-card q-anim" });
-      var hint = h("div", { class: "q-hint" }, "Можно выбрать до " + q.max + ". Выбрано: " + set.size);
+      // Без анимации выезда: вопрос должен появляться сразу. Ученик проходит
+      // опрос за полторы минуты, и каждая задержка на трёх экранах заметна.
+      var qcard = h("div", { class: "q-card" });
+      function hintText() { return t("pick") + " " + q.max + ". " + t("picked") + " " + set.size; }
+      var hint = h("div", { class: "q-hint" }, hintText());
       var grid = h("div", { class: "choice-grid" });
       data.roster.forEach(function (st) {
         var selected = set.has(st.id);
-        var ini = h("span", { class: "ini" }, selected ? "✓" : initials(st.full_name));
+        var ini = h("span", { class: "ini" }, selected ? "\u2713" : initials(st.full_name));
         var b = h("button", { class: "choice" + (selected ? " on" : ""), type: "button" }, ini, h("span", {}, st.full_name));
         b.addEventListener("click", function () {
           if (set.has(st.id)) { set.delete(st.id); b.classList.remove("on"); ini.textContent = initials(st.full_name); }
-          else { if (set.size >= q.max) return; set.add(st.id); b.classList.add("on"); ini.textContent = "✓"; }
-          hint.textContent = "Можно выбрать до " + q.max + ". Выбрано: " + set.size;
+          else { if (set.size >= q.max) return; set.add(st.id); b.classList.add("on"); ini.textContent = "\u2713"; }
+          hint.textContent = hintText();
         });
         grid.appendChild(b);
       });
-      qcard.appendChild(h("div", { class: "q-head" }, h("span", { class: "q-num" }, String(step + 1)), h("div", { class: "q-title" }, q.text)));
+      qcard.appendChild(h("div", { class: "q-head" }, h("span", { class: "q-num" }, String(step + 1)), h("div", { class: "q-title" }, qText(q))));
       qcard.appendChild(hint);
       qcard.appendChild(grid);
 
-      var backBtn = h("button", { class: "btn", type: "button" }, "← Назад");
+      var backBtn = h("button", { class: "btn", type: "button" }, t("back"));
       backBtn.addEventListener("click", function () { if (step > 0) { step--; renderStep(); } });
       var last = step === total - 1;
-      var nextBtn = h("button", { class: "btn btn-primary", type: "button", style: "flex:1" }, last ? "Отправить ответы" : "Далее →");
+      var nextBtn = h("button", { class: "btn btn-primary", type: "button", style: "flex:1" }, last ? t("send") : t("next"));
+      if (last && sending) nextBtn.disabled = true;  // перерисовка во время отправки
       nextBtn.addEventListener("click", function () {
         if (last) submit(nextBtn);
         else { step++; renderStep(); }
@@ -171,21 +305,19 @@
       window.scrollTo(0, 0);
     }
 
-    mount(h("div", {},
-      h("div", { style: "text-align:center;margin-bottom:16px" },
-        h("h1", { style: "font-size:21px;letter-spacing:-0.02em" }, data.title),
-        h("div", { class: "muted", style: "font-size:14px;margin-top:4px" }, data.class_name)),
-      progress,
-      stepHost,
-      msg));
-    renderStep();
+    rerender = function () { shell(); renderStep(); };
+    rerender();
   }
 
   function renderDone() {
-    mount(h("div", { style: "text-align:center;padding:34px 0" },
-      h("div", { class: "done-circle" }, "✓"),
-      h("h1", { style: "font-size:24px;margin-bottom:8px" }, "Спасибо!"),
-      h("p", { class: "muted", style: "max-width:360px;margin:0 auto" }, "Ваши ответы записаны. Повторно пройти опрос нельзя.")));
+    rerender = function () {
+      mount(h("div", { style: "text-align:center;padding:34px 0" },
+        langSwitch(),
+        h("div", { class: "done-circle" }, "\u2713"),
+        h("h1", { style: "font-size:24px;margin-bottom:8px" }, t("thanks")),
+        h("p", { class: "muted", style: "max-width:360px;margin:0 auto" }, t("done"))));
+    };
+    rerender();
   }
 
   boot();

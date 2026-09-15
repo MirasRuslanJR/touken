@@ -3,15 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Изолят — аналитика социальной изоляции</title>
+    <title>Изолят — социометрия класса</title>
+    <meta name="description" content="Школьная социометрия: граф связей класса и показатели для психолога." />
+    <meta name="robots" content="noindex" />
     <link rel="stylesheet" href="/css/styles.css" />
-    <link
-      rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%232563eb'/%3E%3Ctext x='50' y='70' font-size='58' text-anchor='middle' fill='white' font-family='sans-serif'%3E%D0%98%3C/text%3E%3C/svg%3E"
-    />
-    <script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="mask-icon" href="/favicon.svg" color="#1d2126" />
+    <!--
+      Библиотеки лежат локально, а не во внешней сети доставки: школьные сети
+      в Казахстане её фильтруют, и кабинет там открывался пустым экраном.
+      Отчёты Excel и разбор импортируемых списков делает сервер, поэтому
+      внешних зависимостей у страницы не осталось вовсе.
+    -->
+    <script src="/vendor/vis-network.min.js"></script>
+    <script src="/vendor/qrcode.min.js"></script>
   </head>
   <body>
     <div id="app"></div>

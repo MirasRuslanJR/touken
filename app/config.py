@@ -41,8 +41,9 @@ DATABASE_URL = os.environ.get("DATABASE_URL") or \
 _DEFAULT_SECRET = "change-me-to-a-long-random-string-please"
 SECRET_KEY = os.environ.get("SECRET_KEY")
 if not SECRET_KEY or SECRET_KEY == _DEFAULT_SECRET:
+    # Без эмодзи: в консоли Windows sys.stderr отдаёт их как \-последовательности.
     print(
-        "⚠️  SECRET_KEY не задан — использую временный случайный ключ. "
+        "ВНИМАНИЕ: SECRET_KEY не задан, использую временный случайный ключ. "
         "Токены входа сбросятся при перезапуске сервера. Для продакшена "
         "задай постоянный SECRET_KEY в .env.",
         file=sys.stderr,
@@ -52,21 +53,55 @@ if not SECRET_KEY or SECRET_KEY == _DEFAULT_SECRET:
 # Срок жизни токена входа (7 дней).
 TOKEN_TTL = 7 * 24 * 3600
 
+# Код приглашения оператора сервиса. Пока он не задан, любой посетитель может
+# зарегистрировать школу прямо из интерфейса — удобно для локального демо.
+# Если код задан, форма регистрации школы отключается, и завести аккаунт можно
+# только по коду: доступ к персональным данным несовершеннолетних не должен
+# выдаваться самообслуживанием.
+REGISTRATION_INVITE_CODE = (os.environ.get("REGISTRATION_INVITE_CODE") or "").strip()
+if not REGISTRATION_INVITE_CODE:
+    print(
+        "⚠️  REGISTRATION_INVITE_CODE не задан: зарегистрировать школу может любой "
+        "посетитель. Это нормально для локального демо; для публичного стенда "
+        "задай код в .env — тогда форма регистрации школы отключится.",
+        file=sys.stderr,
+    )
+
+# Разрешённые источники для CORS. По умолчанию — только тот же origin, что и
+# фронтенд (он отдаётся этим же приложением), поэтому список пуст. Для демо с
+# другого устройства задай ALLOWED_ORIGINS через запятую.
+ALLOWED_ORIGINS = [o.strip() for o in (os.environ.get("ALLOWED_ORIGINS") or "").split(",") if o.strip()]
+
 # Три социометрических вопроса. Тексты можно переопределять для каждого среза
 # (адаптация под возраст класса) — ключи и типы при этом фиксированы.
+#
+# Казахский обязателен, а не «приятное дополнение»: в НИШ и в большинстве
+# региональных школ часть класса думает и отвечает на казахском, а неточно
+# понятый вопрос портит сами данные, ради которых всё и делается.
 QUESTIONS = [
-    {"key": "cinema", "text": "С кем бы ты пошёл в кино?", "type": "positive", "max": 3},
-    {"key": "project", "text": "С кем хотел бы делать проект?", "type": "positive", "max": 3},
-    {"key": "alone", "text": "Кто в классе часто остаётся один?", "type": "isolation", "max": 3},
+    {"key": "cinema", "type": "positive", "max": 3,
+     "text": "С кем бы ты пошёл в кино?",
+     "text_kk": "Киноға кіммен барар едің?"},
+    {"key": "project", "type": "positive", "max": 3,
+     "text": "С кем хотел бы делать проект?",
+     "text_kk": "Жобаны кіммен бірге жасағың келеді?"},
+    {"key": "alone", "type": "isolation", "max": 3,
+     "text": "Кто в классе часто остаётся один?",
+     "text_kk": "Сыныпта кім жиі жалғыз қалады?"},
 ]
 QUESTION_KEYS = [q["key"] for q in QUESTIONS]
 POSITIVE_KEYS = [q["key"] for q in QUESTIONS if q["type"] == "positive"]
+
+LANGUAGES = ("ru", "kk")
 
 
 def effective_questions(survey):
     """
     Вопросы для конкретного среза. Ключи/типы фиксированы (чтобы аналитика
     не ломалась), но текст и max можно менять под возраст. Фолбэк — дефолты.
+
+    Возвращаются оба языка сразу: ученик переключает язык на самой странице
+    опроса, и лишний запрос к серверу посреди прохождения не нужен.
     """
     overrides = {}
     raw = getattr(survey, "questions", None)
@@ -83,17 +118,21 @@ def effective_questions(survey):
     for base in QUESTIONS:
         ov = overrides.get(base["key"], {})
         text = str(ov.get("text") or "").strip() or base["text"]
+        text_kk = str(ov.get("text_kk") or "").strip() or base["text_kk"]
         try:
             mx = int(ov.get("max") or base["max"])
         except (TypeError, ValueError):
             mx = base["max"]
-        result.append({"key": base["key"], "text": text, "type": base["type"], "max": max(1, min(10, mx))})
+        result.append({
+            "key": base["key"], "text": text, "text_kk": text_kk,
+            "type": base["type"], "max": max(1, min(10, mx)),
+        })
     return result
 
 
 def serialize_questions(raw_list):
     """Валидирует входящие вопросы -> JSON-строка (или None). Ключи ограничены
-    дефолтными; кастомизируются только текст и max."""
+    дефолтными; кастомизируются только тексты (ru/kk) и max."""
     valid_keys = {q["key"] for q in QUESTIONS}
     out = []
     for q in raw_list or []:
@@ -106,5 +145,9 @@ def serialize_questions(raw_list):
             mx = int(q.get("max") or 3)
         except (TypeError, ValueError):
             mx = 3
-        out.append({"key": key, "text": text, "max": max(1, min(10, mx))})
+        item = {"key": key, "text": text, "max": max(1, min(10, mx))}
+        text_kk = str(q.get("text_kk") or "").strip()
+        if text_kk:
+            item["text_kk"] = text_kk
+        out.append(item)
     return json.dumps(out, ensure_ascii=False) if out else None
