@@ -11,7 +11,7 @@ Run:  python -m app.seed
 from datetime import date, datetime, timezone
 
 from .alerts import generate_for_survey as generate_alerts
-from .database import Base, SessionLocal, engine
+from .database import SessionLocal
 from .models import (
     ROLE_ADMIN,
     ROLE_HEAD,
@@ -51,7 +51,12 @@ SURVEYS = [("Осенний срез", "2025-09-15"), ("Зимний срез", 
 
 
 def run():
-    Base.metadata.create_all(bind=engine)
+    # Схему создаёт ТОЛЬКО Alembic (`alembic upgrade head`; на Render — в
+    # buildCommand перед этим сидом). Здесь стоял create_all, и это тот же
+    # механизм, который однажды сломал боевую базу: create_all создаёт
+    # таблицы, не записав версию в alembic_version, после чего upgrade падает
+    # на уже существующих таблицах, а новые КОЛОНКИ в старые таблицы он не
+    # добавляет никогда. Подробности — в README, раздел «Миграции».
     db = SessionLocal()
     try:
         school = db.query(School).filter(School.invite_code == DEMO_INVITE).first()

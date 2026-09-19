@@ -10,10 +10,30 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   </head>
   <body>
-    <header class="topbar">
-      <span class="brand"><span class="logo">И</span>Изолят</span>
+    <header class="survey-topbar">
+      <span class="brand">
+        <span class="logo">
+          <!-- Тот же знак, что на фавиконке и в кабинете: связанная тройка
+               и узел, оставшийся в стороне. -->
+          <svg class="logo-mark" viewBox="0 0 64 64" aria-hidden="true">
+            <g stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity="0.55">
+              <line x1="24" y1="22" x2="40" y2="26" />
+              <line x1="24" y1="22" x2="27" y2="40" />
+              <line x1="40" y1="26" x2="27" y2="40" />
+            </g>
+            <g fill="currentColor">
+              <circle cx="24" cy="22" r="6" />
+              <circle cx="40" cy="26" r="6" />
+              <circle cx="27" cy="40" r="6" />
+            </g>
+            <circle class="logo-lone" cx="47" cy="47" r="6.5" fill="none"
+                    stroke="currentColor" stroke-width="3" />
+          </svg>
+        </span>
+        Изолят
+      </span>
       <span class="spacer"></span>
-      <span class="pill">Анонимный опрос</span>
+      <span class="pill">Конфиденциальный опрос</span>
     </header>
     <div id="survey" class="survey-shell"></div>
     <footer class="sitefoot">
