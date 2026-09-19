@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from .. import assist
 from ..config import REGISTRATION_INVITE_CODE
 from ..database import get_db
 from ..models import ROLE_ADMIN, ROLE_PSYCHOLOGIST, ROLES, Psychologist, School
@@ -81,7 +82,7 @@ def register(data: RegisterIn, request: Request, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
-    return {"token": create_token(user.id, user.token_version), "user": _public(user, school)}
+    return {"token": create_token(user.id, user.token_version), "user": _public(user, school), "features": {"ai_assist": assist.is_configured()}}
 
 
 @router.post("/schools")
@@ -124,7 +125,7 @@ def login(data: LoginIn, request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=403, detail="Учётная запись отключена администратором школы")
     user.last_login_at = datetime.now(timezone.utc)
     db.commit()
-    return {"token": create_token(user.id, user.token_version or 1), "user": _with_school(db, user)}
+    return {"token": create_token(user.id, user.token_version or 1), "user": _with_school(db, user), "features": {"ai_assist": assist.is_configured()}}
 
 
 @router.post("/logout")
@@ -151,12 +152,18 @@ def change_password(
     user.token_version = (user.token_version or 1) + 1
     db.commit()
     db.refresh(user)
-    return {"token": create_token(user.id, user.token_version), "user": _with_school(db, user)}
+    return {"token": create_token(user.id, user.token_version), "user": _with_school(db, user), "features": {"ai_assist": assist.is_configured()}}
 
 
 @router.get("/me")
 def me(user: Psychologist = Depends(get_current_psychologist), db: Session = Depends(get_db)):
-    return {"user": _with_school(db, user)}
+    # features: что доступно на этом стенде. Интерфейс по нему решает, стоит
+    # ли показывать кнопку, — предлагать действие, которое заведомо вернёт
+    # ошибку, хуже, чем не предлагать вовсе.
+    return {
+        "user": _with_school(db, user),
+        "features": {"ai_assist": assist.is_configured()},
+    }
 
 
 # ------------------------------------------------- управление сотрудниками

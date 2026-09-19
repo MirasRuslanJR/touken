@@ -4,17 +4,17 @@
     система, поэтому иконка показывает сам предмет работы, а не букву.
     Монохром, без градиентов: читается в 16 px на вкладке браузера.
   -->
-  <rect width="64" height="64" rx="12" fill="#131316"/>
-  <g stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" opacity="0.85">
+  <rect width="64" height="64" rx="12" fill="#4B3FFF"/>
+  <g stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" opacity="0.85">
     <line x1="24" y1="22" x2="40" y2="26"/>
     <line x1="24" y1="22" x2="27" y2="40"/>
     <line x1="40" y1="26" x2="27" y2="40"/>
   </g>
-  <g fill="#ffffff">
+  <g fill="#FFFFFF">
     <circle cx="24" cy="22" r="5"/>
     <circle cx="40" cy="26" r="5"/>
     <circle cx="27" cy="40" r="5"/>
   </g>
   <!-- Отделённый узел: полый, не связан ни с кем. -->
-  <circle cx="47" cy="47" r="5.5" fill="#131316" stroke="#E5584D" stroke-width="2.5"/>
+  <circle cx="47" cy="47" r="5.5" fill="#4B3FFF" stroke="#FFFFFF" stroke-width="2.5"/>
 </svg>

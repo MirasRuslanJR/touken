@@ -21,6 +21,12 @@
     + "Внутренняя шкала 0-100, с внешними нормами не сверялась: "
     + "годится, чтобы сравнивать классы между собой и с самими собой во времени.";
   // Оформление графа. Держим в одном месте, чтобы легенда и узлы не разошлись.
+  //
+  // Цвета фиксированные, не зависящие от темы: социограмма рисуется в тёмной
+  // врезке и в светлом, и в тёмном интерфейсе (--net-bg в styles.css одинаков
+  // для обеих тем). Это сознательно — граф остаётся главным объектом экрана,
+  // единственным местом, где цвет кодирует данные, и не перестраивается под
+  // тему на глазах у психолога, который сравнивает срезы.
   var GRAPH = {
     nodeBorder: "#35353D",
     nodeFill: "#1A1A1E",
@@ -185,7 +191,97 @@
     del: function (u) { return api("DELETE", u); },
   };
 
+  /* ----------------------------------------------------------------- тема
+     Три состояния, как в системе: "system" (по настройке ОС), "light",
+     "dark". Явный выбор проставляет data-theme на <html> и переживает
+     перезагрузку; без выбора работает prefers-color-scheme.
+     Хранилище может быть недоступно (приватный режим) — тогда просто
+     остаёмся на системной теме, интерфейс от этого не страдает. */
+  var THEME_KEY = "izolyat.theme";
+
+  function currentTheme() {
+    try {
+      var v = localStorage.getItem(THEME_KEY);
+      if (v === "light" || v === "dark") return v;
+    } catch (e) {}
+    return "system";
+  }
+  function systemIsDark() {
+    try { return window.matchMedia("(prefers-color-scheme: dark)").matches; } catch (e) { return false; }
+  }
+  function applyTheme(mode) {
+    var root = document.documentElement;
+    if (mode === "light" || mode === "dark") root.setAttribute("data-theme", mode);
+    else root.removeAttribute("data-theme");
+    // Цвет адресной строки на телефоне должен совпадать с фоном страницы.
+    var dark = mode === "dark" || (mode === "system" && systemIsDark());
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", dark ? "#0B0B10" : "#FBFBFD");
+  }
+  function toggleTheme() {
+    // Переключаем относительно того, что человек видит сейчас.
+    var next = (currentTheme() === "dark" || (currentTheme() === "system" && systemIsDark()))
+      ? "light" : "dark";
+    try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+    applyTheme(next);
+    // Перерисовываем текущий экран: иконка кнопки зависит от темы, а граф
+    // на социограмме строится с цветами, снятыми на момент отрисовки.
+    router();
+  }
+  function themeButton() {
+    var dark = currentTheme() === "dark" || (currentTheme() === "system" && systemIsDark());
+    var btn = h("button", {
+      class: "btn btn-sm btn-icon", onClick: toggleTheme,
+      title: dark ? "Светлая тема" : "Тёмная тема",
+      "aria-label": dark ? "Включить светлую тему" : "Включить тёмную тему",
+    });
+    var svg = hs("svg", { viewBox: "0 0 24 24", fill: "none", "aria-hidden": "true" });
+    if (dark) {
+      // Солнце — нажатие включит светлую тему.
+      svg.appendChild(hs("circle", { cx: "12", cy: "12", r: "4.2", fill: "currentColor" }));
+      var rays = hs("g", { stroke: "currentColor", "stroke-width": "1.8", "stroke-linecap": "round" });
+      [[12, 2, 12, 4], [12, 20, 12, 22], [2, 12, 4, 12], [20, 12, 22, 12],
+       [4.9, 4.9, 6.3, 6.3], [17.7, 17.7, 19.1, 19.1],
+       [19.1, 4.9, 17.7, 6.3], [6.3, 17.7, 4.9, 19.1]].forEach(function (c) {
+        rays.appendChild(hs("line", { x1: c[0], y1: c[1], x2: c[2], y2: c[3] }));
+      });
+      svg.appendChild(rays);
+    } else {
+      // Луна — нажатие включит тёмную тему.
+      svg.appendChild(hs("path", {
+        d: "M20 14.2A8.2 8.2 0 0 1 9.8 4a8.4 8.4 0 1 0 10.2 10.2z",
+        fill: "currentColor",
+      }));
+    }
+    btn.appendChild(svg);
+    return btn;
+  }
+
   /* ------------------------------------------------------------- ui atoms */
+  // Знак «Изолята» — тот же, что на фавиконке: связанная тройка и узел,
+  // оставшийся в стороне. Это и есть предмет работы программы, поэтому
+  // в интерфейсе стоит он, а не первая буква названия.
+  function logoMark() {
+    var svg = hs("svg", { viewBox: "0 0 64 64", "aria-hidden": "true", class: "logo-mark" });
+    var lines = hs("g", {
+      stroke: "currentColor", "stroke-width": "3", "stroke-linecap": "round", opacity: "0.55",
+    });
+    [[24, 22, 40, 26], [24, 22, 27, 40], [40, 26, 27, 40]].forEach(function (c) {
+      lines.appendChild(hs("line", { x1: c[0], y1: c[1], x2: c[2], y2: c[3] }));
+    });
+    svg.appendChild(lines);
+    var dots = hs("g", { fill: "currentColor" });
+    [[24, 22], [40, 26], [27, 40]].forEach(function (c) {
+      dots.appendChild(hs("circle", { cx: c[0], cy: c[1], r: "6" }));
+    });
+    svg.appendChild(dots);
+    // Отделённый узел: полый и другого цвета — его и ищет психолог.
+    svg.appendChild(hs("circle", {
+      cx: "47", cy: "47", r: "6.5", fill: "none",
+      stroke: "currentColor", "stroke-width": "3", class: "logo-lone",
+    }));
+    return svg;
+  }
   function spinner() { return h("div", { class: "center" }, h("div", { class: "spinner" })); }
   function alertBox(kind, msg) { return h("div", { class: "alert alert-" + kind }, msg); }
   function emptyState(title, hint, action) {
@@ -310,7 +406,7 @@
   }
 
   /* ---------------------------------------------------------- app state */
-  var state = { user: null, unseen: 0 };
+  var state = { user: null, unseen: 0, features: {} };
 
   function role() { return (state.user && state.user.role) || "psychologist"; }
   function canCasework() { return role() === "psychologist" || role() === "admin"; }
@@ -388,7 +484,7 @@
     });
 
     var side = h("aside", { class: "sidebar no-print" },
-      h("a", { class: "brand", href: "#/" }, h("span", { class: "logo" }, "И"), "Изолят"),
+      h("a", { class: "brand", href: "#/" }, h("span", { class: "logo" }, logoMark()), "Изолят"),
       h("div", { class: "sidebar-nav" }, nav),
       // Пользователь и выход прижаты к низу панели: это не навигация,
       // а служебная зона, и она не должна конкурировать с разделами.
@@ -400,7 +496,8 @@
             state.user.school_name ? " · " + state.user.school_name : "")) : null,
         h("div", { class: "sidebar-actions" },
           h("button", { class: "btn btn-sm", onClick: accountModal }, "Аккаунт"),
-          h("button", { class: "btn btn-sm", onClick: logout }, "Выйти"))));
+          h("button", { class: "btn btn-sm", onClick: logout }, "Выйти"),
+          themeButton())));
 
     frag.appendChild(h("div", { class: "app-shell" },
       side,
@@ -475,7 +572,7 @@
     var inviteIn = h("input", { class: "input", placeholder: "Код от вашей школы" });
     var inviteField = field("Код приглашения", inviteIn);
     var msg = h("div");
-    var submit = h("button", { class: "btn btn-primary", type: "submit" }, "Войти");
+    var submit = h("button", { class: "btn btn-primary btn-lg", type: "submit", style: { width: "100%" } }, "Войти");
     var toggle = h("a", { href: "#" });
     var schoolLink = h("a", { href: "#" }, "Зарегистрировать школу");
 
@@ -499,7 +596,7 @@
       });
     });
 
-    var form = h("form", { class: "card-pad stack", style: { paddingTop: "0" } },
+    var form = h("form", { class: "stack" },
       nameField, field("E-mail", emailIn), field("Пароль", passIn), inviteField, msg, submit,
       h("div", { class: "tiny muted", style: { textAlign: "center" } }, h("span", {}, "Нет аккаунта? "), toggle),
       h("div", { class: "tiny muted", style: { textAlign: "center" } }, schoolLink));
@@ -515,7 +612,7 @@
         : API.post("/api/auth/register", { email: email, password: password, full_name: nameIn.value.trim(), invite_code: inviteIn.value.trim() });
       p.then(function (d) {
         localStorage.setItem("izolyat.token", d.token);
-        state.user = d.user; dash.classes = null; dash.loaded = false;
+        state.user = d.user; state.features = d.features || {}; dash.classes = null; dash.loaded = false;
         return refreshUnseen().then(function () { go("/"); });
       })
         .catch(function (err) { msg.replaceChildren(alertBox("error", err.message)); submit.disabled = false; });
@@ -523,18 +620,37 @@
     setMode("in");
     // Подпись под названием говорит, что это за программа и для кого, без
     // обещаний и общих слов: её читает школьный психолог, а не покупатель.
-    mount(h("div", {},
-      h("div", { class: "center" },
-        h("div", { class: "card", style: { width: "380px", maxWidth: "92vw" } },
-          h("div", { class: "card-pad", style: { textAlign: "center", paddingTop: "26px" } },
-            h("div", { class: "logo", style: { width: "40px", height: "40px", fontSize: "18px", margin: "0 auto 12px" } }, "И"),
-            h("h2", { style: { fontSize: "19px" } }, "Изолят"),
-            h("p", { class: "muted tiny", style: { marginTop: "4px" } },
-              "Социометрия класса для школьного психолога")),
-          form)),
-      h("footer", { class: "sitefoot" },
-        h("a", { href: "/privacy.html" }, "Политика обработки данных"),
-        h("a", { href: "/terms.html" }, "Условия использования"))));
+    // Две панели: слева — что это за программа и на чём держится, справа —
+    // форма. Одинокая карточка посреди пустого экрана не объясняла ничего,
+    // а этот экран открывают и те, кто видит «Изолят» впервые.
+    mount(h("div", { class: "auth" },
+      h("div", { class: "auth-side" },
+        h("div", { class: "auth-brand" },
+          h("span", { class: "logo" }, logoMark()),
+          h("span", {}, "Изолят")),
+        h("h1", { class: "auth-claim" }, "Видно, кто в классе остался один"),
+        h("p", { class: "auth-lead" },
+          "Ученики отвечают на три вопроса за полторы минуты. "
+          + "Система строит граф связей класса и сама предупреждает, "
+          + "если у ребёнка падают входящие выборы."),
+        h("ul", { class: "auth-points" },
+          h("li", {}, "Кто назвал ребёнка одиноким — не видит никто"),
+          h("li", {}, "Статус «изолят» не ставится при явке ниже 70%"),
+          h("li", {}, "Каждое открытие карточки пишется в журнал доступа")),
+        h("div", { class: "auth-foot" },
+          h("a", { href: "/privacy.html" }, "Политика обработки данных"),
+          h("a", { href: "/terms.html" }, "Условия использования"))),
+      h("div", { class: "auth-panel" },
+        h("div", { class: "auth-form" },
+          // Дублируем бренд: на узких экранах левая панель скрыта, и без
+          // этого пользователь видел бы форму без названия программы.
+          h("div", { class: "auth-brand auth-brand-sm" },
+            h("span", { class: "logo" }, logoMark()),
+            h("span", {}, "Изолят")),
+          h("h2", {}, "Вход в кабинет"),
+          h("p", { class: "muted tiny auth-sub" },
+            "Аккаунт выдаёт школа по коду приглашения"),
+          form))));
   }
 
   /* ========================================================== DASHBOARD */
@@ -622,7 +738,7 @@
       controls.push(h("button", { class: "btn btn-sm", onClick: function () { preventionModal(dash.classId); } }, "Профилактика"));
     }
     controls.push(h("button", { class: "btn btn-sm btn-primary", onClick: function () { classModal(null); } }, "+ Класс"));
-    return h("div", { style: { marginBottom: "18px" } },
+    return h("div", { class: "mb-5" },
       h("div", { class: "breadcrumb" }, h("a", { href: "#/" }, "Мои классы"), h("span", {}, "/"),
         h("span", {}, dash.cls ? dash.cls.name : "Класс")),
       h("div", { style: { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" } }, controls));
@@ -633,7 +749,7 @@
   function consentBanner() {
     var missing = (dash.consent && dash.consent.missing) || [];
     if (!missing.length) return null;
-    return h("div", { style: { marginBottom: "18px" } }, alertBox("info",
+    return h("div", { class: "mb-5" }, alertBox("info",
       h("span", {}, "Не участвуют в срезах, нет отметки о согласии на обработку данных: ",
         h("b", {}, missing.map(function (m) { return m.full_name; }).join(", ")), ". ",
         h("a", { href: "#", onClick: function (e) { e.preventDefault(); manageStudentsModal(); } }, "Отметить согласие"))));
@@ -656,7 +772,7 @@
     var m = a.graph_metrics;
     if (!m.responded) return null;  // «совсем нет ответов» подсвечивается на самом графе
     var pct = Math.round((m.participation || 0) * 100);
-    return h("div", { style: { marginBottom: "18px" } }, alertBox("info",
+    return h("div", { class: "mb-5" }, alertBox("info",
       "Опрос прошли " + m.responded + " из " + m.students + " (" + pct + "%). Пока ответило меньше 70% класса, "
       + "статус «изолят» не ставится, индекс не считается, а оповещения о падении связей отключены: "
       + "по такой явке нельзя отличить изоляцию от того, что ученика просто некому было выбрать."));
@@ -751,7 +867,7 @@
         h("span", { class: "pill " + (sv && sv.is_open ? "badge-green" : "") }, sv && sv.is_open ? "Опрос открыт" : "Опрос закрыт"),
         openBtn, delBtn));
     }
-    return h("div", { class: "card card-pad", style: { marginBottom: "18px" } }, inner);
+    return h("div", { class: "card card-pad mb-5" }, inner);
   }
 
   function graphCard(sv) {
@@ -823,25 +939,36 @@
       var wi = m.wellbeing_index;
       var wiLabel = wi == null ? "недостаточно ответов"
         : wi >= 70 ? "высокий уровень" : wi >= 45 ? "средний уровень" : "низкий уровень";
+      // Колонка рядом с графом узкая, поэтому показатели идут в два уровня:
+      // индекс во всю ширину, под ним четыре плитки в две колонки, а
+      // второстепенные величины — строками «ключ-значение», а не россыпью
+      // одинаковых пилюль, в которой глазу не за что зацепиться.
       body = h("div", {},
-        h("div", { class: "tiles" },
-          h("div", { class: "tile tile-hero" },
-            h("div", { class: "tile-label", title: WI_HINT }, "Индекс связности класса"),
-            h("div", { class: "tile-value" }, wi == null ? "—" : wi),
-            h("div", { class: "tile-sub", title: WI_HINT },
-              wiLabel + (wi == null ? "" : " · шкала 0–100 · экспериментальный"))),
-          tile("Учеников", m.students, "прошли опрос: " + m.responded),
-          tile("Изоляты", m.isolates, m.unknown ? "ещё " + m.unknown + " без данных" : "нет входящих выборов"),
+        h("div", { class: "metric-hero" },
+          h("div", { class: "tile-label", title: WI_HINT }, "Индекс связности класса"),
+          h("div", { class: "metric-hero-value" }, wi == null ? "—" : String(wi)),
+          h("div", { class: "tile-sub", title: WI_HINT },
+            wiLabel + (wi == null ? "" : " · шкала 0–100 · экспериментальный"))),
+        h("div", { class: "tiles metric-tiles" },
+          tile("Учеников", m.students, "прошли: " + m.responded),
+          tile("Изоляты", m.isolates, m.unknown ? "ещё " + m.unknown + " без данных" : "нет входящих"),
           tile("Взаимные пары", m.mutual_pairs, "взаимность " + num(m.reciprocity * 100) + "%"),
           tile("Плотность", num(m.density, 2), "среди ответивших")),
-        h("div", { class: "chip-row", style: { marginTop: "14px" } },
-          h("span", { class: "pill" }, "Сплочённость: " + num(m.cohesion, 2)),
-          h("span", { class: "pill" }, "Компоненты: " + m.components),
-          h("span", { class: "pill" }, "Сообщества: " + m.communities),
-          h("span", { class: "pill" }, "Мосты: " + m.bridges),
-          h("span", { class: "pill" }, "Связей: " + m.positive_edges)));
+        h("div", { class: "metric-rows" },
+          metricRow("Сплочённость", num(m.cohesion, 2)),
+          metricRow("Компоненты", m.components),
+          metricRow("Сообщества", m.communities),
+          metricRow("Мосты", m.bridges),
+          metricRow("Связей", m.positive_edges)));
     }
     return h("div", { class: "card" }, h("div", { class: "card-head" }, h("h3", {}, "Показатели класса")), h("div", { class: "card-pad" }, body));
+  }
+
+  function metricRow(label, value) {
+    return h("div", { class: "metric-row" },
+      h("span", { class: "mr-label" }, label),
+      h("span", { class: "mr-dots" }),
+      h("span", { class: "mr-value" }, String(value)));
   }
 
   function rosterCard() {
@@ -854,29 +981,50 @@
     var body;
     if (dash.students.length === 0) body = emptyState("Список пуст", "Добавьте учеников через «Ученики».");
     else {
-      var rows = sorted.map(function (s) {
+      // Список людей, а не таблица чисел. Раньше здесь было шесть числовых
+      // колонок с урезанными заголовками («Вх», «Исх», «Вз», «Один»), которые
+      // в узкой колонке рядом с графом читались как ведомость. Теперь строка
+      // устроена по важности: имя, статус, и справа — входящие выборы,
+      // главный показатель этого экрана. Остальные метрики остаются в
+      // подписи и в карточке ученика.
+      var items = sorted.map(function (s) {
         var m = per[String(s.id)];
-        return h("tr", { class: "clickable", onClick: function () { go("/student/" + s.id); } },
-          h("td", {}, dispName(s.id, s.full_name),
-            m && !m.responded ? h("span", { class: "muted tiny", title: "Не прошёл(-ла) этот срез" }, " ·  не ответил") : null),
-          h("td", {}, m ? (m.status === "connected" ? communityPill(m.community) : statusPill(m.status)) : "—"),
-          h("td", { class: "num" }, m ? m.in_degree : 0),
-          h("td", { class: "num" }, m ? m.out_degree : 0),
-          h("td", { class: "num" }, m ? m.mutual : 0),
-          h("td", { class: "num" }, m ? aloneText(m.alone_votes, m.alone_reportable) : 0));
+        var detail = [];
+        if (m) {
+          detail.push("исходящих: " + m.out_degree);
+          detail.push("взаимных: " + m.mutual);
+          // aloneText возвращает 0 (число) при отсутствии номинаций и "<3",
+          // когда их меньше порога раскрытия, — в подписи ни то ни другое
+          // показывать не нужно.
+          if (m.alone_votes) detail.push("«часто один»: " + aloneText(m.alone_votes, m.alone_reportable));
+        }
+        var isIsolate = m && m.status === "isolate";
+        return h("div", {
+          class: "stu" + (isIsolate ? " is-isolate" : ""),
+          onClick: function () { go("/student/" + s.id); },
+        },
+          h("div", { class: "stu-main" },
+            h("div", { class: "stu-name" },
+              dispName(s.id, s.full_name),
+              m && !m.responded
+                ? h("span", { class: "stu-flag", title: "Не прошёл(-ла) этот срез" }, "не ответил")
+                : null),
+            detail.length ? h("div", { class: "stu-sub" }, detail.join(" · ")) : null),
+          h("div", { class: "stu-status" },
+            m ? (m.status === "connected" ? communityPill(m.community) : statusPill(m.status)) : null),
+          h("div", { class: "stu-in", title: "Входящие выборы: сколько одноклассников назвали" },
+            h("span", { class: "stu-in-num" }, m ? String(m.in_degree) : "0"),
+            h("span", { class: "stu-in-cap" }, "вх")));
       });
-      body = h("div", { style: { overflowX: "auto" } },
-        h("table", { class: "table" },
-          h("thead", {}, h("tr", {}, h("th", {}, "Ученик"), h("th", {}, "Статус"),
-            h("th", { class: "num", title: "Входящие" }, "Вх"), h("th", { class: "num", title: "Исходящие" }, "Исх"),
-            h("th", { class: "num", title: "Взаимные" }, "Вз"), h("th", { class: "num", title: "«Часто один»" }, "Один"))),
-          h("tbody", {}, rows)));
+      body = h("div", { class: "stulist" }, items);
     }
     return h("div", { class: "card" },
-      h("div", { class: "card-head" }, h("h3", {}, "Ученики"), h("span", { class: "spacer" }),
-        dash.analysis ? h("button", { class: "btn btn-sm", onClick: exportXlsx }, "Выгрузить в Excel") : null,
-        dash.analysis ? h("button", { class: "btn btn-sm", onClick: reportModal }, "Отчёт и печать") : null),
-      h("div", { class: "card-pad", style: { paddingTop: "6px", paddingBottom: "6px" } }, body));
+      h("div", { class: "card-head" }, h("h3", {}, "Ученики"),
+        dash.students.length ? h("span", { class: "count-chip" }, String(dash.students.length)) : null,
+        h("span", { class: "spacer" }),
+        dash.analysis ? h("button", { class: "btn btn-sm", onClick: exportXlsx }, "Excel") : null,
+        dash.analysis ? h("button", { class: "btn btn-sm", onClick: reportModal }, "Отчёт") : null),
+      body);
   }
 
   /* ------------------------------------------------------ vis-network */
@@ -1110,7 +1258,7 @@
             }, s.is_active ? "Выбыл" : "Вернуть"),
             h("button", { class: "btn btn-danger btn-sm", title: "Удалить безвозвратно вместе с историей", onClick: function () { if (confirm("Удалить «" + s.full_name + "» вместе со всей историей?\n\nЕсли ученик просто выбыл из класса — отметьте его как выбывшего, тогда история срезов сохранится.")) API.del("/api/students/" + s.id).then(function () { dash.cache = {}; reload(); }); } }, "Удалить")));
       });
-      listWrap.replaceChildren(h("div", { style: { overflowX: "auto" } },
+      listWrap.replaceChildren(h("div", { class: "table-wrap" },
         h("table", { class: "table" },
           h("thead", {}, h("tr", {}, h("th", {}, "Ученик"), h("th", {}, "Согласие"), h("th", {}))),
           h("tbody", {}, rows))));
@@ -1325,7 +1473,7 @@
       var tag = (m.is_isolate ? " · изолят" : "") + (m.alone_reportable ? " · «один»×" + m.alone_votes : "");
       return h("button", { class: "pill badge-red", style: { cursor: "pointer" }, onClick: function () { go("/student/" + s.id); } }, s.full_name + tag);
     });
-    return h("div", { class: "card dropbar", style: { marginBottom: "18px" } },
+    return h("div", { class: "card dropbar mb-5" },
       h("div", { class: "card-pad" },
         h("div", { style: { display: "flex", alignItems: "baseline", gap: "10px", flexWrap: "wrap" } },
           h("div", { style: { flex: "1", minWidth: "200px" } },
@@ -1382,7 +1530,7 @@
       gm.reliability === "low" ? h("p", { class: "muted", style: { marginBottom: "12px" } },
         "Внимание: опрос прошли менее 70% класса. Показатели считаются по ответившим, "
         + "статус «изолят» в этом срезе не присваивается.") : null,
-      h("div", { style: { overflowX: "auto" } }, h("table", { class: "table" },
+      h("div", { class: "table-wrap" }, h("table", { class: "table" },
         h("thead", {}, h("tr", {}, h("th", {}, "Ученик"), h("th", {}, "Статус"),
           h("th", { class: "num" }, "Вх"), h("th", { class: "num" }, "Исх"), h("th", { class: "num" }, "Вз"),
           h("th", { class: "num" }, "Один"), h("th", { class: "num" }, "Degree"), h("th", { class: "num" }, "Betw."))),
@@ -1456,7 +1604,7 @@
         h("td", { class: "num" }, deltaSpan(r.delta)), h("td", {}, badge));
     });
     return h("div", {}, summary,
-      h("div", { style: { overflowX: "auto" } }, h("table", { class: "table" },
+      h("div", { class: "table-wrap" }, h("table", { class: "table" },
         h("thead", {}, h("tr", {}, h("th", {}, "Ученик"), h("th", { class: "num" }, "Вх (A)"),
           h("th", { class: "num" }, "Вх (B)"), h("th", { class: "num" }, "Δ"), h("th", {}, "Изменение"))),
         h("tbody", {}, body))));
@@ -1528,6 +1676,98 @@
       .catch(function (e) { mount(shell(h("div", {}, alertBox("error", e.message), h("p", { style: { marginTop: "12px" } }, h("a", { href: "#/" }, "На главную"))))); });
   }
 
+  /* --------------------------------------------- «Как помочь»: подсказка
+     Методическая подсказка по обезличенным показателям. Наружу уходят
+     только цифры — ни имени, ни заметок (см. app/assist.py). Психолог
+     может раскрыть и посмотреть, что именно было отправлено: доверие к
+     такой функции держится на проверяемости, а не на обещании.
+
+     Кнопка показывается только если ключ задан на сервере: предлагать
+     действие, которое заведомо вернёт ошибку, хуже, чем не предлагать. */
+  function assistBlock(sid, latest) {
+    if (!state.features || !state.features.ai_assist) return null;
+
+    var body = h("div", { class: "card-pad" });
+    var btn = h("button", { class: "btn btn-primary" }, "Подобрать шаги");
+
+    function intro() {
+      body.replaceChildren(
+        h("p", { class: "muted", style: { marginBottom: "var(--s4)" } },
+          latest
+            ? "Подберём, с чего начать работу, по показателям последнего среза. "
+              + "Наружу уходят только цифры: возраст, число выборов и явка класса. "
+              + "Имя, код и заметки не передаются."
+            : "Срезов ещё не было — подсказку можно получить после первого опроса."),
+        latest ? btn : null);
+    }
+
+    function fail(msg) {
+      body.replaceChildren(alertBox("error", msg),
+        h("div", { style: { marginTop: "var(--s3)" } },
+          h("button", { class: "btn btn-sm", onClick: run }, "Попробовать ещё раз")));
+    }
+
+    function show(d) {
+      var a = d.assist;
+      var kids = [];
+      if (a.reading) kids.push(h("p", { class: "assist-reading" }, a.reading));
+
+      kids.push(h("ol", { class: "assist-steps" }, a.steps.map(function (s) {
+        return h("li", {},
+          h("div", { class: "as-title" }, s.title),
+          s.how ? h("div", { class: "as-how" }, s.how) : null);
+      })));
+
+      if (a.watch && a.watch.length) {
+        kids.push(h("div", { class: "assist-sub" },
+          h("div", { class: "section-title" }, "На что обратить внимание"),
+          h("ul", { class: "assist-watch" }, a.watch.map(function (w) { return h("li", {}, w); }))));
+      }
+      if (a.escalate) {
+        kids.push(h("div", { class: "assist-escalate" },
+          h("div", { class: "section-title" }, "Когда нужен не только психолог"),
+          h("p", {}, a.escalate)));
+      }
+
+      // Что именно ушло наружу — раскрывается по клику. Психолог отвечает
+      // за данные детей и должен иметь возможность это проверить.
+      kids.push(h("details", { class: "assist-sent" },
+        h("summary", { class: "tiny muted" }, "Что было отправлено"),
+        h("pre", { class: "assist-json" }, JSON.stringify(d.sent, null, 2))));
+
+      kids.push(h("p", { class: "assist-disclaimer tiny" },
+        "Подсказка составлена языковой моделью по обезличенным показателям и "
+        + "не является заключением. Решение принимает психолог."));
+
+      kids.push(h("div", { style: { marginTop: "var(--s4)" } },
+        h("button", { class: "btn btn-sm", onClick: run }, "Пересобрать")));
+
+      body.replaceChildren();
+      kids.forEach(function (k) { if (k) body.appendChild(k); });
+    }
+
+    function run() {
+      body.replaceChildren(
+        h("div", { class: "assist-loading" },
+          h("div", { class: "spinner" }),
+          h("p", { class: "muted tiny", style: { marginTop: "var(--s3)" } },
+            "Подбираем шаги…")));
+      API.post("/api/students/" + sid + "/assist", {})
+        .then(show)
+        .catch(function (e) { fail(e.message); });
+    }
+
+    btn.addEventListener("click", run);
+    intro();
+
+    return h("div", { class: "card mb-5" },
+      h("div", { class: "card-head" },
+        h("h3", {}, "Как помочь"),
+        h("span", { class: "spacer" }),
+        h("span", { class: "badge" }, "ИИ-подсказка")),
+      body);
+  }
+
   function buildStudent(data) {
     var student = data.student;
     // dynamics приходят уже отсортированными по дате среза и содержат только
@@ -1535,19 +1775,28 @@
     var dyn = data.dynamics;
     var latest = dyn.length ? dyn[dyn.length - 1] : null;
 
-    var header = h("div", { class: "card card-pad", style: { marginBottom: "18px" } },
-      h("div", { style: { display: "flex", gap: "16px", alignItems: "flex-start", flexWrap: "wrap" } },
-        h("div", { style: { flex: "1", minWidth: "220px" } },
-          h("h1", { style: { fontSize: "24px" } }, student.full_name),
-          h("div", { class: "muted", style: { marginTop: "6px" } },
-            h("span", { class: "pill mono", style: { marginRight: "8px" } }, student.code),
-            student.gender === "m" ? "мужской пол · " : student.gender === "f" ? "женский пол · " : "", ageText(student.birth_date)),
-          student.note ? h("p", { class: "muted", style: { marginTop: "8px" } }, student.note) : null),
-        h("div", { style: { textAlign: "right" } },
-          h("div", { class: "section-title" }, "Текущий статус"),
-          latest ? (latest.status === "connected" && latest.community != null
-            ? communityPill(latest.community) : statusPill(latest.status)) : h("span", { class: "muted" }, "нет срезов"),
-          latest ? h("div", { class: "muted tiny", style: { marginTop: "6px" } }, "на " + fmtDate(latest.date)) : null)));
+    // Шапка-профиль: инициалы, имя, под ним — сухие факты одной строкой.
+    // Статус справа, потому что это первое, ради чего карточку открывают.
+    var initials = (student.full_name || "?").trim().split(/\s+/)
+      .slice(0, 2).map(function (w) { return w.charAt(0).toUpperCase(); }).join("");
+    var facts = [];
+    facts.push(student.gender === "m" ? "мужской пол" : student.gender === "f" ? "женский пол" : null);
+    facts.push(ageText(student.birth_date));
+    facts = facts.filter(Boolean);
+
+    var header = h("div", { class: "card stu-header" },
+      h("div", { class: "sh-avatar" }, initials),
+      h("div", { class: "sh-main" },
+        h("h1", {}, student.full_name),
+        h("div", { class: "sh-facts" },
+          h("span", { class: "pill mono" }, student.code),
+          facts.length ? h("span", { class: "muted tiny" }, facts.join(" · ")) : null),
+        student.note ? h("p", { class: "sh-note" }, student.note) : null),
+      h("div", { class: "sh-status" },
+        h("div", { class: "section-title" }, "Текущий статус"),
+        latest ? (latest.status === "connected" && latest.community != null
+          ? communityPill(latest.community) : statusPill(latest.status)) : h("span", { class: "muted" }, "нет срезов"),
+        latest ? h("div", { class: "muted tiny", style: { marginTop: "6px" } }, "на " + fmtDate(latest.date)) : null));
 
     var metricsBody = latest ? h("div", {},
       h("div", { class: "tiles" },
@@ -1560,37 +1809,47 @@
         alertBox("info", "Последний срез прошли " + Math.round((latest.participation || 0) * 100)
           + "% класса. Показатели считаются по ответившим, судить об изоляции по ним нельзя.")) : null)
       : emptyState("Нет данных", "Нужен хотя бы один заполненный срез.");
-    var metricsCardEl = h("div", { class: "card", style: { marginBottom: "18px" } },
+    var metricsCardEl = h("div", { class: "card mb-5" },
       h("div", { class: "card-head" }, h("h3", {}, "Показатели"), h("span", { class: "spacer" }),
         latest ? h("span", { class: "muted tiny" }, latest.title + " · " + fmtDate(latest.date)) : null),
       h("div", { class: "card-pad" }, metricsBody));
 
+    // Срезы — строками сверху вниз, новые первыми. Таблица на восемь колонок
+    // («Вх», «Исх», «Вз», «Один», «Δвх») не читалась: сокращения приходилось
+    // расшифровывать по всплывающей подсказке. Здесь на виду то, ради чего
+    // смотрят динамику, — входящие выборы и их изменение к прошлому срезу.
     var dynTable = null;
     if (dyn.length) {
-      var trs = dyn.map(function (p, i) {
-        return h("tr", {},
-          h("td", {}, p.title), h("td", {}, fmtDate(p.date)),
-          h("td", {}, statusPill(p.status)),
-          h("td", { class: "num" }, p.in_degree), h("td", { class: "num" }, p.out_degree),
-          h("td", { class: "num" }, p.mutual),
-          h("td", { class: "num" }, p.alone_count == null ? h("span", { class: "muted" }, "<3") : p.alone_count),
-          h("td", { class: "num" }, i === 0 ? h("span", { class: "muted" }, "—") : deltaSpan(p.in_degree - dyn[i - 1].in_degree)));
+      var items = dyn.slice().reverse().map(function (p) {
+        var i = dyn.indexOf(p);
+        var delta = i === 0 ? null : p.in_degree - dyn[i - 1].in_degree;
+        var parts = ["исходящих: " + p.out_degree, "взаимных: " + p.mutual];
+        if (p.alone_count != null) parts.push("«часто один»: " + p.alone_count);
+        return h("div", { class: "dynrow" },
+          h("div", { class: "dr-main" },
+            h("div", { class: "dr-title" }, p.title),
+            h("div", { class: "dr-sub" }, fmtDate(p.date) + " · " + parts.join(" · "))),
+          h("div", { class: "dr-status" }, statusPill(p.status)),
+          h("div", { class: "dr-in" },
+            h("span", { class: "dr-in-num" }, String(p.in_degree)),
+            h("span", { class: "dr-in-cap" }, "входящих")),
+          h("div", { class: "dr-delta" },
+            delta === null ? h("span", { class: "muted tiny" }, "первый") : deltaSpan(delta)));
       });
-      dynTable = h("div", { style: { overflowX: "auto", marginTop: "12px" } },
-        h("table", { class: "table" }, h("thead", {}, h("tr", {}, h("th", {}, "Срез"), h("th", {}, "Дата"), h("th", {}, "Статус"),
-          h("th", { class: "num" }, "Вх"), h("th", { class: "num" }, "Исх"), h("th", { class: "num" }, "Вз"), h("th", { class: "num" }, "Один"), h("th", { class: "num" }, "Δвх"))),
-          h("tbody", {}, trs)));
+      dynTable = h("div", { class: "dynlist" }, items);
     }
-    var dynamicsCard = h("div", { class: "card", style: { marginBottom: "18px" } },
+    var dynamicsCard = h("div", { class: "card mb-5" },
       h("div", { class: "card-head" }, h("h3", {}, "Динамика (входящие выборы)")),
       h("div", { class: "card-pad" }, lineChart(dyn), dynTable));
 
-    var historyCard = h("div", { class: "card", style: { marginBottom: "18px" } },
+    var historyCard = h("div", { class: "card mb-5" },
       h("div", { class: "card-head" }, h("h3", {}, "История связей"), h("span", { class: "spacer" }), h("span", { class: "muted tiny" }, "изменение по срезам")),
       h("div", { class: "card-pad" }, dyn.length === 0 ? emptyState("Нет срезов")
         : h("div", { class: "stack" }, dyn.slice().reverse().map(function (p) { return connectionBlock(p); }))));
 
-    var intCard = h("div", { class: "card", style: { marginBottom: "18px" } },
+    var assistCard = assistBlock(student.id, latest);
+
+    var intCard = h("div", { class: "card mb-5" },
       h("div", { class: "card-head" }, h("h3", {}, "Вмешательства и эффективность")),
       h("div", { class: "card-pad" }, interventionForm(student.id),
         data.interventions.length === 0 ? h("div", { style: { marginTop: "8px" } }, emptyState("Пока нет вмешательств"))
@@ -1611,7 +1870,8 @@
 
     mount(shell(h("div", { class: "page-narrow", style: { margin: "0 auto" } },
       h("div", { class: "breadcrumb" }, h("a", { href: "#/" }, "Классы"), h("span", {}, "/"), h("span", {}, "Карточка ученика")),
-      header, metricsCardEl, dynamicsCard, historyCard, intCard, h("div", { class: "two-col" }, meetingsCard, notesCard))));
+      header, metricsCardEl, assistCard, dynamicsCard, historyCard, intCard,
+      h("div", { class: "two-col" }, meetingsCard, notesCard))));
 
     function del(url, msg, sid) { if (confirm(msg)) API.del(url).then(function () { renderStudent(sid); }); }
   }
@@ -1778,46 +2038,81 @@
           h("button", { class: "btn btn-primary", onClick: function () { classModal(null); } }, "Создать класс"))));
     }
 
-    var cards = rows.map(function (r) {
+    // Классы — строками, а не плитками. Сервер уже отсортировал их по
+    // «нужности внимания», и список сверху вниз читается как очередь работы:
+    // в сетке равнозначных карточек этот порядок не виден. Каждая строка —
+    // одна мысль: что за класс, что с ним, насколько он связен.
+    var items = rows.map(function (r) {
       var c = r["class"];
       var wi = r.wellbeing_index;
       var needsSurvey = !r.last_survey;
-      var lowData = r.reliability === "low";
 
-      var badges = [];
-      if (r.open_alerts) badges.push(h("span", { class: "badge badge-red" }, "Сигналов: " + r.open_alerts));
-      if (r.isolates) badges.push(h("span", { class: "pill", style: { color: "var(--red)" } }, "изолятов: " + r.isolates));
-      if (r.consent.missing.length) badges.push(h("span", { class: "pill", style: { color: "var(--amber)" } },
-        "без согласия: " + r.consent.missing.length));
-      if (lowData) badges.push(lowDataPill(r.participation));
+      // Состояние класса одной формулировкой — то, ради чего психолог
+      // просматривает список. Приоритет тот же, что в серверной сортировке.
+      var state_, stateClass;
+      if (r.open_alerts) {
+        state_ = r.open_alerts + " " + plural(r.open_alerts, "сигнал", "сигнала", "сигналов");
+        stateClass = "badge-danger";
+      } else if (r.isolates) {
+        state_ = r.isolates + " " + plural(r.isolates, "изолят", "изолята", "изолятов");
+        stateClass = "badge-warn";
+      } else if (needsSurvey) {
+        state_ = "Нет срезов";
+        stateClass = "";
+      } else if (r.reliability === "low") {
+        state_ = "Низкая явка";
+        stateClass = "badge-warn";
+      } else {
+        state_ = "Спокойно";
+        stateClass = "badge-ok";
+      }
+
+      var notes = [];
+      if (r.consent.missing.length) {
+        notes.push(r.consent.missing.length + " без согласия");
+      }
+      if (!needsSurvey) {
+        notes.push(fmtDate(r.last_survey.conducted_on));
+      }
 
       return h("div", {
-        class: "card card-pad clickable classcard" + (r.open_alerts ? " urgent" : ""),
+        class: "classrow" + (r.open_alerts ? " urgent" : ""),
         onClick: function () { go("/class/" + c.id); },
       },
-        h("div", { style: { display: "flex", alignItems: "baseline", gap: "10px", flexWrap: "wrap" } },
-          h("h3", { style: { fontSize: "17px", flex: "1", minWidth: "140px" } }, c.name),
-          h("span", { class: "muted tiny" }, r.students + " учеников")),
-        h("div", { class: "chip-row", style: { marginTop: "8px", minHeight: "26px" } },
-          badges.length ? badges : h("span", { class: "muted tiny" }, "всё спокойно")),
-        h("div", { style: { display: "flex", alignItems: "flex-end", gap: "14px", marginTop: "10px" } },
-          h("div", {},
-            h("div", { class: "tile-label", title: WI_HINT }, "Индекс связности"),
-            h("div", { class: "tile-value", style: { fontSize: "26px" }, title: WI_HINT }, wi == null ? "—" : wi)),
-          h("div", { style: { flex: "1" } },
-            h("div", { class: "muted tiny" }, needsSurvey ? "Срезов ещё не было"
-              : r.last_survey.title + " · " + fmtDate(r.last_survey.conducted_on)),
-            needsSurvey ? null : h("div", { class: "progress", style: { marginTop: "6px" } },
-              h("span", { style: { width: Math.round((r.participation || 0) * 100) + "%" } })))),
-        needsSurvey ? h("div", { class: "muted tiny", style: { marginTop: "8px", color: "var(--accent)" } },
-          "Провести первый срез") : null);
+        h("div", { class: "cr-main" },
+          h("div", { class: "cr-name" }, c.name),
+          h("div", { class: "cr-sub" },
+            r.students + " " + plural(r.students, "ученик", "ученика", "учеников"),
+            notes.length ? " · " + notes.join(" · ") : "")),
+        h("div", { class: "cr-state" },
+          h("span", { class: "badge " + stateClass }, h("span", { class: "dot" }), state_)),
+        h("div", { class: "cr-part" },
+          needsSurvey
+            ? h("span", { class: "muted tiny" }, "—")
+            : h("div", {},
+                h("div", { class: "cr-part-num" }, Math.round((r.participation || 0) * 100) + "%"),
+                h("div", { class: "progress" },
+                  h("span", { style: { width: Math.round((r.participation || 0) * 100) + "%" } })))),
+        h("div", { class: "cr-wi", title: WI_HINT },
+          h("span", { class: "cr-wi-num" }, wi == null ? "—" : wi),
+          h("span", { class: "cr-wi-cap" }, "индекс")));
     });
 
     return h("div", {},
       homeHeader(rows.length),
       homeSummary(rows),
-      h("div", { class: "section-title", style: { marginTop: "26px" } }, "Классы"),
-      h("div", { class: "class-grid" }, cards));
+      h("div", { class: "card section-gap" },
+        h("div", { class: "card-head" },
+          h("h3", {}, "Классы"),
+          h("span", { class: "count-chip" }, String(rows.length)),
+          h("span", { class: "spacer" }),
+          h("span", { class: "muted tiny hide-sm" }, "Сверху — куда смотреть в первую очередь")),
+        h("div", { class: "classlist-head" },
+          h("div", {}, "Класс"),
+          h("div", {}, "Состояние"),
+          h("div", {}, "Явка"),
+          h("div", {}, "Индекс")),
+        h("div", { class: "classlist" }, items)));
   }
 
   // Сводка по всем классам сразу: психологу с 250-300 учениками важно
@@ -1836,24 +2131,41 @@
     });
     var avgWi = wiCount ? Math.round(wiSum / wiCount) : null;
 
+    // Качественная оценка рядом с числом: «61» само по себе ничего не
+    // говорит тому, кто видит индекс впервые.
+    var wiWord = avgWi == null ? null
+      : avgWi >= 70 ? "высокий" : avgWi >= 45 ? "средний" : "низкий";
+
+    // Показатели разведены по роли, а не выстроены в ряд одинаковых плиток:
+    //   * индекс — аналитика, главное число экрана;
+    //   * сигналы и согласия — требуют действия, поэтому ведут по ссылке
+    //     и окрашены статусным цветом только когда действие есть;
+    //   * классы и ученики — контекст, нейтральные.
     return h("div", { class: "hero" },
       h("div", { class: "hero-main" },
         h("div", { class: "tile-label", title: WI_HINT }, "Средний индекс связности"),
-        h("div", { class: "hero-value", title: WI_HINT }, avgWi == null ? "—" : String(avgWi)),
+        h("div", { class: "hero-figure" },
+          h("div", { class: "hero-value", title: WI_HINT }, avgWi == null ? "—" : String(avgWi)),
+          wiWord ? h("div", { class: "hero-scale" },
+            h("div", { class: "hero-word" }, wiWord),
+            h("div", { class: "hero-track" },
+              h("span", { style: { width: Math.max(2, Math.min(100, avgWi)) + "%" } })),
+            h("div", { class: "hero-ticks" }, h("span", {}, "0"), h("span", {}, "100"))) : null),
         h("div", { class: "muted tiny" },
           wiCount
             ? "по " + wiCount + " " + plural(wiCount, "классу", "классам", "классам") + " со срезами"
             : "срезов пока не было"),
-        alerts
-          ? h("div", { class: "hero-note" },
-              h("span", { class: "badge badge-red" }, alerts + " " + plural(alerts, "сигнал", "сигнала", "сигналов")),
-              h("a", { href: "#/alerts" }, "Посмотреть"))
-          : h("div", { class: "hero-note muted tiny" }, "Активных сигналов нет")),
+        h("div", { class: "hero-note" },
+          alerts
+            ? [h("span", { class: "badge badge-danger" }, h("span", { class: "dot" }),
+                alerts + " " + plural(alerts, "сигнал", "сигнала", "сигналов")),
+               h("a", { href: "#/alerts" }, "Разобрать")]
+            : h("span", { class: "badge badge-ok" }, h("span", { class: "dot" }), "Активных сигналов нет"))),
       h("div", { class: "hero-tiles" },
         tile("Классов", rows.length, needSurvey ? needSurvey + " без срезов" : "все со срезами"),
         tile("Учеников", students, "в работе"),
         tile("Изолятов", isolates, "по последним срезам"),
-        tile("Без согласия", noConsent, "не участвуют в срезах")));
+        tile("Без согласия", noConsent, noConsent ? "не участвуют в срезах" : "все согласия собраны")));
   }
 
   function plural(n, one, few, many) {
@@ -1904,7 +2216,7 @@
         body = h("div", { class: "stack" }, d.alerts.map(function (a) { return alertRow(a, load, showResolved); }));
       }
       return h("div", {},
-        h("div", { style: { marginBottom: "18px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" } },
+        h("div", { class: "page-head" },
           h("div", { style: { flex: "1", minWidth: "200px" } },
             h("h1", { style: { fontSize: "22px" } }, showResolved ? "Закрытые оповещения" : "Входящие"),
             h("div", { class: "muted tiny" }, "Система сама отмечает, у кого ухудшились связи между срезами")),
@@ -1986,17 +2298,17 @@
     });
 
     return h("div", {},
-      h("div", { style: { marginBottom: "18px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" } },
+      h("div", { class: "page-head" },
         h("div", { style: { flex: "1", minWidth: "200px" } },
           h("h1", { style: { fontSize: "22px" } }, d.school ? d.school.name : "Школа"),
           h("div", { class: "muted tiny" }, "Сводка по классам. Персональных данных учеников на этом экране нет.")),
         h("a", { class: "btn btn-sm", href: "/api/school/export.xlsx" + tokenQuery() }, "Выгрузить в Excel")),
-      h("div", { class: "card card-pad", style: { marginBottom: "18px" } }, tiles, gap),
+      h("div", { class: "card card-pad mb-5" }, tiles, gap),
       h("div", { class: "card" },
         h("div", { class: "card-head" }, h("h3", {}, "Классы"), h("span", { class: "spacer" }),
           h("span", { class: "muted tiny" }, "сначала те, где нужно внимание")),
         h("div", { class: "card-pad", style: { paddingTop: "6px" } },
-          h("div", { style: { overflowX: "auto" } }, h("table", { class: "table" },
+          h("div", { class: "table-wrap" }, h("table", { class: "table" },
             h("thead", {}, h("tr", {}, h("th", {}, "Класс"), h("th", {}, "Психолог"),
               h("th", { class: "num" }, "Учеников"), h("th", {}, "Последний срез"),
               h("th", { class: "num" }, "Явка"), h("th", { class: "num", title: WI_HINT }, "Индекс"),
@@ -2057,9 +2369,9 @@
 
     return h("div", {},
       h("h1", { style: { fontSize: "22px", marginBottom: "4px" } }, "Сотрудники школы"),
-      h("div", { class: "muted tiny", style: { marginBottom: "18px" } },
+      h("div", { class: "muted tiny mb-5" },
         "Завуч видит только сводку по классам. Карточки учеников и имена ему недоступны."),
-      h("div", { class: "card card-pad", style: { marginBottom: "18px" } },
+      h("div", { class: "card card-pad mb-5" },
         h("div", { class: "section-title" }, "Код приглашения"),
         h("p", { class: "muted tiny", style: { marginBottom: "8px" } },
           "Передайте его сотруднику. По нему он зарегистрируется именно в вашей школе. Без кода регистрация невозможна."),
@@ -2068,7 +2380,7 @@
       h("div", { class: "card" },
         h("div", { class: "card-head" }, h("h3", {}, "Доступы")),
         h("div", { class: "card-pad", style: { paddingTop: "6px" } },
-          h("div", { style: { overflowX: "auto" } }, h("table", { class: "table" },
+          h("div", { class: "table-wrap" }, h("table", { class: "table" },
             h("thead", {}, h("tr", {}, h("th", {}, "Сотрудник"), h("th", {}, "E-mail"),
               h("th", {}, "Роль"), h("th", {}, "Последний вход"), h("th", {}))),
             h("tbody", {}, rows))))));
@@ -2111,10 +2423,10 @@
             "Откройте класс и нажмите «Профилактика». Система предложит, с чего начать, по данным последнего среза.");
 
       return h("div", {},
-        h("div", { style: { marginBottom: "18px" } },
+        h("div", { class: "mb-5" },
           h("h1", { style: { fontSize: "22px" } }, "Профилактическая работа"),
           h("div", { class: "muted tiny" }, "План, проведение и охват по всем вашим классам")),
-        h("div", { class: "card card-pad", style: { marginBottom: "18px" } }, tiles),
+        h("div", { class: "card card-pad mb-5" }, tiles),
         h("div", { class: "card" },
           h("div", { class: "card-head" }, h("h3", {}, "Мероприятия"), h("span", { class: "spacer" }), tabs),
           h("div", { class: "card-pad" }, body)));
@@ -2416,7 +2728,7 @@
           block("Остальной класс", d.rest_of_class)),
         // Честная оговорка: без неё цифры читались бы как доказательство.
         h("div", { style: { marginTop: "12px" } }, alertBox("info", d.disclaimer)),
-        d.details.length ? h("div", { style: { overflowX: "auto", marginTop: "12px" } },
+        d.details.length ? h("div", { class: "table-wrap", style: { marginTop: "var(--s3)" } },
           h("table", { class: "table" },
             h("thead", {}, h("tr", {}, h("th", {}, "Ученик"), h("th", { class: "num" }, "Вх. до"),
               h("th", { class: "num" }, "Вх. после"), h("th", { class: "num" }, "Δ"), h("th", {}, "Изменение"))),
@@ -2446,7 +2758,7 @@
       sel.value = String(days);
 
       var body = d.entries.length
-        ? h("div", { style: { overflowX: "auto" } }, h("table", { class: "table" },
+        ? h("div", { class: "table-wrap" }, h("table", { class: "table" },
             h("thead", {}, h("tr", {}, h("th", {}, "Когда"), h("th", {}, "Кто"),
               h("th", {}, "Действие"), h("th", {}, "Объект"), h("th", {}, "IP"))),
             h("tbody", {}, d.entries.map(function (e) {
@@ -2460,7 +2772,7 @@
         : emptyState("Записей нет", "За выбранный период никто не открывал персональные данные.");
 
       return h("div", {},
-        h("div", { style: { marginBottom: "18px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" } },
+        h("div", { class: "page-head" },
           h("div", { style: { flex: "1", minWidth: "200px" } },
             h("h1", { style: { fontSize: "22px" } }, "Журнал доступа"),
             h("div", { class: "muted tiny" }, "Кто и когда открывал персональные данные учеников вашей школы")),
@@ -2525,9 +2837,12 @@
   window.addEventListener("hashchange", router);
 
   /* ============================================================== boot */
+  // Тему применяем до первой отрисовки, иначе при выбранной тёмной
+  // мелькнёт светлый фон.
+  applyTheme(currentTheme());
   mount(spinner());
   var token = localStorage.getItem("izolyat.token");
-  (token ? API.get("/api/auth/me").then(function (d) { state.user = d.user; }).catch(function () { state.user = null; }) : Promise.resolve())
+  (token ? API.get("/api/auth/me").then(function (d) { state.user = d.user; state.features = d.features || {}; }).catch(function () { state.user = null; }) : Promise.resolve())
     .then(refreshUnseen)
     .then(function () { router(); });
 })();

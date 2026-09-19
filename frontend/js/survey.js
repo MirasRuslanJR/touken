@@ -91,6 +91,36 @@
     return e;
   }
 
+  // Знак «Изолята»: связанная тройка и узел, оставшийся в стороне. Тот же,
+  // что на фавиконке и в кабинете психолога, — страница опроса не должна
+  // выглядеть чужой.
+  function logoMark() {
+    var NS = "http://www.w3.org/2000/svg";
+    function el(tag, attrs) {
+      var n = document.createElementNS(NS, tag);
+      Object.keys(attrs || {}).forEach(function (k) { n.setAttribute(k, attrs[k]); });
+      return n;
+    }
+    var svg = el("svg", { viewBox: "0 0 64 64", "aria-hidden": "true", "class": "logo-mark" });
+    var lines = el("g", {
+      stroke: "currentColor", "stroke-width": "3", "stroke-linecap": "round", opacity: "0.55",
+    });
+    [[24, 22, 40, 26], [24, 22, 27, 40], [40, 26, 27, 40]].forEach(function (c) {
+      lines.appendChild(el("line", { x1: c[0], y1: c[1], x2: c[2], y2: c[3] }));
+    });
+    svg.appendChild(lines);
+    var dots = el("g", { fill: "currentColor" });
+    [[24, 22], [40, 26], [27, 40]].forEach(function (c) {
+      dots.appendChild(el("circle", { cx: c[0], cy: c[1], r: "6" }));
+    });
+    svg.appendChild(dots);
+    svg.appendChild(el("circle", {
+      cx: "47", cy: "47", r: "6.5", fill: "none",
+      stroke: "currentColor", "stroke-width": "3", "class": "logo-lone",
+    }));
+    return svg;
+  }
+
   // Совместимая с любым браузером очистка/замена содержимого (без replaceChildren).
   function clear(node) { node.innerHTML = ""; }
   function setContent(node) {
@@ -198,7 +228,7 @@
       mount(h("div", {},
         langSwitch(),
         h("div", { class: "survey-hero" },
-          h("div", { class: "hicon" }, "И"),
+          h("div", { class: "hicon" }, logoMark()),
           h("h1", {}, info.title),
           h("div", { class: "sub" }, t("anon"))),
         card([

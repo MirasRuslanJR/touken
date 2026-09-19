@@ -13,7 +13,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .. import alerts as alerts_service
-from .. import audit, reports, snapshots
+from .. import assist, audit, reports, snapshots
 from ..analytics import ALONE_MIN_REPORT, student_survey_summary
 from ..config import QUESTIONS, effective_questions, serialize_questions
 from ..database import get_db
@@ -41,6 +41,7 @@ from ..participation import (
     students_with_consent,
 )
 from ..permissions import require_casework, require_casework_download
+from ..ratelimit import check as rate_limit
 from ..retention import DEFAULT_RETENTION_MONTHS, default_retention_until
 from ..schemas import (
     BulkConsentIn,
@@ -832,6 +833,52 @@ def student_card(sid: int, request: Request, user: Psychologist = Depends(requir
         } for iv in interventions],
         "questions": QUESTIONS,
     }
+
+
+@router.post("/students/{sid}/assist")
+def student_assist(
+    sid: int, request: Request,
+    user: Psychologist = Depends(require_casework), db: Session = Depends(get_db),
+):
+    """Подсказка психологу: «как помочь этому подростку».
+
+    Наружу уходят ТОЛЬКО обезличенные показатели — возраст, пол, числа
+    выборов, динамика, явка класса. Ни имени, ни кода, ни заметок, ни
+    названия класса и школы: см. модуль app/assist.py, там же объяснение
+    почему. Отправленный профиль возвращается психологу целиком, чтобы он
+    видел своими глазами, что именно покинуло контур.
+
+    Rate-limit здесь не про безопасность, а про деньги и лимиты внешнего
+    сервиса: кнопку можно зажать.
+    """
+    rate_limit("assist:%s" % user.id, limit=20, window=3600)
+
+    if not assist.is_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="ИИ-подсказки не настроены: администратору нужно задать GROQ_API_KEY.",
+        )
+
+    student = owned_student(db, sid, user)
+    card = student_card(sid, request, user, db)
+    dynamics = card["dynamics"]
+    class_size = len(
+        db.query(Student.id).filter(
+            Student.class_id == student.class_id, Student.is_active.is_(True)
+        ).all()
+    )
+
+    profile = assist.build_profile(student, dynamics, class_size)
+    result, error = assist.suggest(profile)
+
+    # Пишем факт обращения независимо от исхода: проверяющий должен видеть
+    # и неудачные попытки.
+    audit.log(db, user, audit.AI_ASSIST, "student", sid, request)
+    db.commit()
+
+    if error:
+        raise HTTPException(status_code=502, detail=error)
+    return {"assist": result, "sent": profile}
 
 
 # ----------------------------------------------- notes / meetings / interv.
