@@ -358,38 +358,61 @@
       badge ? h("span", { class: "navbadge" }, badge > 99 ? "99+" : String(badge)) : null);
   }
 
+  // Боковое меню вместо горизонтального: разделов шесть, и в строке они
+  // раньше сжимались до нечитаемых огрызков. Сбоку помещаются целиком,
+  // сгруппированы по смыслу, а вся ширина страницы остаётся содержимому.
+  // На узких экранах панель уезжает наверх и прокручивается горизонтально
+  // (см. медиазапросы в styles.css).
   function shell(content) {
     var frag = document.createDocumentFragment();
-    var nav = [];
-    if (canCasework()) {
-      nav.push(navLink("/", "Классы"));
-      nav.push(navLink("/alerts", "Входящие", state.unseen));
-      nav.push(navLink("/prevention", "Профилактика"));
-    }
-    if (canSchool()) nav.push(navLink("/school", "Школа"));
-    if (isAdmin()) nav.push(navLink("/staff", "Сотрудники"));
-    if (isAdmin()) nav.push(navLink("/audit", "Журнал"));
 
-    // Правая часть — одной группой, а не отдельными элементами с распоркой.
-    // С распоркой (flex: 1, база 0) всё сжатие доставалось меню: оно
-    // схлопывалось в узкую полоску, пока почта и кнопки держали полный размер.
-    // Группа с margin-left:auto прижимается вправо и корректно переносится.
-    frag.appendChild(h("header", { class: "topbar" },
+    var groups = [];
+    if (canCasework()) {
+      groups.push({ title: "Работа с классами", items: [
+        navLink("/", "Классы"),
+        navLink("/alerts", "Входящие", state.unseen),
+        navLink("/prevention", "Профилактика"),
+      ]});
+    }
+    var manage = [];
+    if (canSchool()) manage.push(navLink("/school", "Школа"));
+    if (isAdmin()) manage.push(navLink("/staff", "Сотрудники"));
+    if (isAdmin()) manage.push(navLink("/audit", "Журнал"));
+    if (manage.length) groups.push({ title: "Управление", items: manage });
+
+    var nav = [];
+    groups.forEach(function (g) {
+      nav.push(h("div", { class: "nav-group" },
+        h("div", { class: "nav-group-title" }, g.title),
+        h("nav", { class: "nav-items" }, g.items)));
+    });
+
+    var side = h("aside", { class: "sidebar no-print" },
       h("a", { class: "brand", href: "#/" }, h("span", { class: "logo" }, "И"), "Изолят"),
-      h("nav", { class: "topnav" }, nav),
-      h("div", { class: "topbar-actions" },
-        state.user ? h("span", { class: "who hide-sm", title: ROLE_LABEL[role()] || "" },
-          state.user.email,
-          state.user.school_name ? h("span", { class: "muted tiny" }, " · " + state.user.school_name) : null) : null,
-        h("button", { class: "btn btn-sm", onClick: accountModal }, "Аккаунт"),
-        h("button", { class: "btn btn-sm", onClick: logout }, "Выйти"))));
-    frag.appendChild(h("main", { class: "page" }, content));
-    // Правовые документы должны быть доступны с любого экрана, а не только со
-    // страницы входа: школа обязана показать их родителю по первому запросу.
-    frag.appendChild(h("footer", { class: "sitefoot no-print" },
-      h("span", {}, "Изолят"),
-      h("a", { href: "/privacy.html", target: "_blank", rel: "noopener" }, "Политика обработки данных"),
-      h("a", { href: "/terms.html", target: "_blank", rel: "noopener" }, "Условия использования")));
+      h("div", { class: "sidebar-nav" }, nav),
+      // Пользователь и выход прижаты к низу панели: это не навигация,
+      // а служебная зона, и она не должна конкурировать с разделами.
+      h("div", { class: "sidebar-foot" },
+        state.user ? h("div", { class: "who", title: ROLE_LABEL[role()] || "" },
+          h("div", { class: "who-name" }, state.user.full_name || state.user.email),
+          h("div", { class: "who-sub" },
+            ROLE_LABEL[role()] || "",
+            state.user.school_name ? " · " + state.user.school_name : "")) : null,
+        h("div", { class: "sidebar-actions" },
+          h("button", { class: "btn btn-sm", onClick: accountModal }, "Аккаунт"),
+          h("button", { class: "btn btn-sm", onClick: logout }, "Выйти"))));
+
+    frag.appendChild(h("div", { class: "app-shell" },
+      side,
+      h("div", { class: "app-main" },
+        h("main", { class: "page" }, content),
+        // Правовые документы должны быть доступны с любого экрана, а не
+        // только со страницы входа: школа обязана показать их родителю по
+        // первому запросу.
+        h("footer", { class: "sitefoot no-print" },
+          h("span", {}, "Изолят"),
+          h("a", { href: "/privacy.html", target: "_blank", rel: "noopener" }, "Политика обработки данных"),
+          h("a", { href: "/terms.html", target: "_blank", rel: "noopener" }, "Условия использования")))));
     return frag;
   }
 
@@ -1790,15 +1813,63 @@
           "Провести первый срез") : null);
     });
 
-    return h("div", {}, homeHeader(rows.length), h("div", { class: "class-grid" }, cards));
+    return h("div", {},
+      homeHeader(rows.length),
+      homeSummary(rows),
+      h("div", { class: "section-title", style: { marginTop: "26px" } }, "Классы"),
+      h("div", { class: "class-grid" }, cards));
+  }
+
+  // Сводка по всем классам сразу: психологу с 250-300 учениками важно
+  // сначала увидеть общую картину, а уже потом идти по карточкам. Числа
+  // считаются на клиенте из того же ответа /api/overview — отдельный
+  // запрос ради четырёх сумм не нужен.
+  function homeSummary(rows) {
+    var students = 0, alerts = 0, isolates = 0, noConsent = 0, wiSum = 0, wiCount = 0, needSurvey = 0;
+    rows.forEach(function (r) {
+      students += r.students || 0;
+      alerts += r.open_alerts || 0;
+      isolates += r.isolates || 0;
+      noConsent += (r.consent && r.consent.missing ? r.consent.missing.length : 0);
+      if (r.wellbeing_index != null) { wiSum += r.wellbeing_index; wiCount++; }
+      if (!r.last_survey) needSurvey++;
+    });
+    var avgWi = wiCount ? Math.round(wiSum / wiCount) : null;
+
+    return h("div", { class: "hero" },
+      h("div", { class: "hero-main" },
+        h("div", { class: "tile-label", title: WI_HINT }, "Средний индекс связности"),
+        h("div", { class: "hero-value", title: WI_HINT }, avgWi == null ? "—" : String(avgWi)),
+        h("div", { class: "muted tiny" },
+          wiCount
+            ? "по " + wiCount + " " + plural(wiCount, "классу", "классам", "классам") + " со срезами"
+            : "срезов пока не было"),
+        alerts
+          ? h("div", { class: "hero-note" },
+              h("span", { class: "badge badge-red" }, alerts + " " + plural(alerts, "сигнал", "сигнала", "сигналов")),
+              h("a", { href: "#/alerts" }, "Посмотреть"))
+          : h("div", { class: "hero-note muted tiny" }, "Активных сигналов нет")),
+      h("div", { class: "hero-tiles" },
+        tile("Классов", rows.length, needSurvey ? needSurvey + " без срезов" : "все со срезами"),
+        tile("Учеников", students, "в работе"),
+        tile("Изолятов", isolates, "по последним срезам"),
+        tile("Без согласия", noConsent, "не участвуют в срезах")));
+  }
+
+  function plural(n, one, few, many) {
+    var m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return one;
+    if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
+    return many;
   }
 
   function homeHeader(count) {
-    return h("div", { style: { marginBottom: "18px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" } },
+    var name = state.user && state.user.full_name ? state.user.full_name.split(" ")[0] : null;
+    return h("div", { class: "page-head" },
       h("div", { style: { flex: "1", minWidth: "200px" } },
-        h("h1", { style: { fontSize: "22px" } }, "Мои классы"),
+        h("h1", {}, name ? "С возвращением, " + name : "Мои классы"),
         h("div", { class: "muted tiny" }, count ? "Сначала те, где нужно внимание" : "")),
-      h("button", { class: "btn btn-sm btn-primary", onClick: function () { classModal(null); } }, "+ Класс"));
+      h("button", { class: "btn btn-primary", onClick: function () { classModal(null); } }, "+ Класс"));
   }
 
   /* ================================================ ВХОДЯЩИЕ: оповещения */

@@ -22,8 +22,18 @@ $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
 # Interpreter: prefer the one that has the dependencies installed.
-$py = "C:\Python314\python.exe"
-if (-not (Test-Path $py)) { $py = "python" }
+# Bare "python" is the last resort: on Windows it may be the Microsoft Store
+# stub, which prints "Python" and exits with code 49 instead of running.
+$candidates = @(
+    "C:\Python314\python.exe",
+    "C:\Python312\python.exe",
+    "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
+    "$env:LOCALAPPDATA\Microsoft\WindowsApps\python.exe"
+)
+$py = $null
+foreach ($c in $candidates) { if (Test-Path $c) { $py = $c; break } }
+if (-not $py) { $py = "python" }
+Write-Host "Interpreter: $py" -ForegroundColor DarkGray
 
 # Environment variables override .env, so Supabase is not used.
 $env:DATABASE_URL = "sqlite:///izolyat.db"
