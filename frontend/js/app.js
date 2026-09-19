@@ -4,12 +4,13 @@
 (function () {
   "use strict";
 
-  // Цвета сообществ на социограмме. Подобраны приглушёнными и различимыми на
-  // светлом фоне: насыщенные «неоновые» оттенки на белом режут глаз и мешают
-  // читать подписи узлов. Порядок задаёт различимость соседних групп.
+  // Цвета сообществ на социограмме. Подобраны под тёмный фон: на нём
+  // приглушённые оттенки сливаются, поэтому взяты светлые и насыщенные —
+  // они держат контраст с подложкой и различимы между собой.
+  // Порядок задаёт различимость соседних групп.
   var PALETTE = [
-    "#3d6c9c", "#4a7c59", "#a8642f", "#2f7a77", "#8c5060",
-    "#5a6aa0", "#8a7230", "#43707e", "#7d5a3c", "#5d6b70",
+    "#7B72FF", "#3FD9A0", "#FFA94D", "#4FC9E8", "#FF7BAC",
+    "#A78BFA", "#FFD24D", "#5AD1C4", "#F98F6C", "#96A6C8",
   ];
   // Индекс связности — наша собственная свёртка взаимности, плотности и доли
   // изолятов. Она не сверялась с внешними нормами, поэтому везде, где число
@@ -20,15 +21,17 @@
     + "годится, чтобы сравнивать классы между собой и с самими собой во времени.";
   // Оформление графа. Держим в одном месте, чтобы легенда и узлы не разошлись.
   var GRAPH = {
-    nodeBorder: "#9aa0a6",
-    nodeFill: "#ffffff",
-    label: "#16181b",
-    isolateFill: "#fef3f2", isolateBorder: "#b42318",
-    unknownFill: "#f1f2f4", unknownBorder: "#9aa0a6",
-    edge: "#c3c6ca",
-    mutual: "#1f5aa6",
-    bridge: "#a15c07",
-    highlight: "#eaf0f8",
+    nodeBorder: "#3A3A4C",
+    nodeFill: "#1A1A26",
+    label: "#FFFFFF",
+    // Изолят — то, ради чего открывают этот экран: заливка тёмно-красная,
+    // обводка яркая, чтобы узел читался с проектора через весь зал.
+    isolateFill: "#3D1620", isolateBorder: "#FF5C5C",
+    unknownFill: "#16161F", unknownBorder: "#4A4A5C",
+    edge: "#3A3A4C",
+    mutual: "#6E63FF",
+    bridge: "#FFB340",
+    highlight: "#4B3FFF",
   };
   var QLABEL = { cinema: "Кино", project: "Проект", alone: "«Часто один»" };
   // Виды и адресаты профилактических мероприятий. Списки закрытые: по ним
@@ -214,8 +217,34 @@
     }), label);
     return btn;
   }
+  // Числовая плитка досчитывается до значения, а не появляется готовой:
+  // на демонстрации это показывает, что показатель посчитан. Анимируются
+  // только чистые числа — «—», проценты и строки вроде «12 из 25» выводятся
+  // как есть, иначе на экране мелькал бы мусор.
+  function countUp(el, target) {
+    var calm = false;
+    try { calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) {}
+    var decimals = (String(target).split(".")[1] || "").length;
+    if (calm || target === 0) { el.textContent = target.toFixed(decimals); return; }
+    var start = 0, dur = 700, t0 = null;
+    function step(ts) {
+      if (t0 === null) t0 = ts;
+      var p = Math.min(1, (ts - t0) / dur);
+      var eased = 1 - Math.pow(1 - p, 3);   // ease-out: быстро, затем мягко
+      el.textContent = (start + (target - start) * eased).toFixed(decimals);
+      if (p < 1) requestAnimationFrame(step);
+      else el.textContent = target.toFixed(decimals);
+    }
+    el.textContent = "0";
+    requestAnimationFrame(step);
+  }
   function tile(label, value, sub) {
-    return h("div", { class: "tile" }, h("div", { class: "tile-label" }, label), h("div", { class: "tile-value" }, value), sub != null ? h("div", { class: "tile-sub" }, sub) : null);
+    var valueEl = h("div", { class: "tile-value" });
+    var num = typeof value === "number" ? value
+      : (typeof value === "string" && /^-?\d+(\.\d+)?$/.test(value.trim()) ? parseFloat(value) : null);
+    if (num !== null && isFinite(num)) countUp(valueEl, num);
+    else valueEl.textContent = value == null ? "" : String(value);
+    return h("div", { class: "tile" }, h("div", { class: "tile-label" }, label), valueEl, sub != null ? h("div", { class: "tile-sub" }, sub) : null);
   }
   function isolateBadge() { return h("span", { class: "badge badge-red" }, h("span", { class: "dot" }), "Изолят"); }
   // «Нет данных» — не мягкая форма «изолята», а отказ ставить статус: ответило
@@ -892,10 +921,11 @@
     dash.edgesDS = new vis.DataSet(a.edges.map(function (e) { return edgeStyle(e, visible); }));
     var options = {
       // Подпись узла рисуется поверх холста и может попасть на ребро, поэтому
-      // ей даётся светлая обводка: без неё имена читаются через раз.
+      // ей даётся обводка цветом фона: без неё имена читаются через раз.
+      // На тёмной теме обводка тёмная — светлая давала бы ореол вокруг букв.
       nodes: {
         shape: "dot",
-        font: { size: 14, color: GRAPH.label, strokeWidth: 3, strokeColor: "#ffffff" },
+        font: { size: 14, color: GRAPH.label, strokeWidth: 3, strokeColor: "#050508" },
       },
       edges: { arrows: { to: { enabled: true, scaleFactor: 0.6 } }, smooth: { type: "continuous" } },
       physics: { stabilization: { iterations: 150 }, barnesHut: { gravitationalConstant: -9000, springLength: 110, springConstant: 0.035, damping: 0.28 } },
@@ -903,11 +933,25 @@
     };
     dash.network = new vis.Network(container, { nodes: dash.nodesDS, edges: dash.edgesDS }, options);
     dash.network.on("click", function (params) { if (params.nodes && params.nodes.length) go("/student/" + params.nodes[0]); });
+    // Граф проявляется, когда раскладка уже сошлась: пока идёт стабилизация,
+    // узлы прыгают, и показывать это незачем. Плавность уважает системную
+    // настройку «уменьшить движение» — при ней холст виден сразу.
+    var calm = false;
+    try { calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) {}
+    if (!calm) {
+      container.style.opacity = "0";
+      container.style.transition = "opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1)";
+    }
+    function reveal() { container.style.opacity = "1"; }
     // Вписываем весь граф в контейнер после раскладки — чтобы на маленьких
     // экранах он корректно уменьшался и был виден целиком.
     dash.network.once("stabilizationIterationsDone", function () {
       try { dash.network.fit({ animation: false }); } catch (e) {}
+      reveal();
     });
+    // Страховка: если событие стабилизации не придёт, холст не должен
+    // остаться невидимым.
+    setTimeout(reveal, 1200);
     // Резервный fit на случай, если событие стабилизации не сработает
     // (мало узлов / отключённая физика) — граф всё равно впишется в экран.
     setTimeout(function () { try { if (dash.network) dash.network.fit({ animation: false }); } catch (e) {} }, 500);

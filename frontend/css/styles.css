@@ -1,77 +1,81 @@
 /* =====================================================================
-   Изолят — дизайн-система.
+   Изолят — дизайн-система (тёмная тема сцены).
 
-   Инструмент школьного психолога, в котором лежат данные детей. Поэтому
-   интерфейс намеренно сдержанный: светлый фон, нейтральная серая шкала,
-   один приглушённый акцент и статусные цвета. Ничего декоративного.
+   Язык интерфейса намеренно совпадает с питч-деком: глубокий чёрный фон,
+   электрик-синий акцент #4B3FFF, крупная плотная типографика. Продукт и
+   презентация читаются как одно целое.
 
-   Сознательно НЕ используется:
-   * градиенты и цветные свечения — они создают ощущение витрины, а не
-     рабочего документа, и мешают читать цифры;
-   * скруглённые «таблетки» у кнопок — прямоугольник с малым радиусом
-     читается как элемент формы, а не как рекламная кнопка;
-   * подпрыгивание и сдвиг элементов при наведении — на плотных таблицах
-     это мешает попадать курсором;
-   * эмодзи вместо иконок — они по-разному выглядят в разных системах и
-     не масштабируются вместе с текстом.
+   Что здесь используется осознанно:
+   * свечение акцентом на ключевых элементах — ведёт взгляд к главному
+     (изоляты, активный раздел, основное действие);
+   * появление блоков и счёт чисел — на демонстрации показывает, что
+     система считает, а не рисует статичную картинку;
+   * тонкие светящиеся границы вместо плотных рамок — на проекторе
+     сохраняют структуру, не съедая контраст.
 
-   Контраст текста к фону везде не ниже 4.5:1 (WCAG AA).
+   Что осталось неизменным по сути:
+   * контраст текста к фону не ниже 4.5:1 (WCAG AA);
+   * prefers-reduced-motion отключает всё движение;
+   * печать остаётся чёрным по белому — на бумагу уходит документ,
+     а не тёмная тема.
    ===================================================================== */
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 
-  /* Нейтральная шкала */
-  --bg: #f4f5f6;
-  --surface: #ffffff;
-  --surface-2: #f1f2f4;
-  --surface-3: #e8eaec;
-  --border: #dcdee1;
-  --border-strong: #c3c6ca;
+  /* Фон: не чистый чёрный, а с холодным подтоном — на проекторе
+     чистый #000 проваливается в тень и съедает границы карточек. */
+  --bg: #08080C;
+  --bg-deep: #050508;
+  --surface: #101018;
+  --surface-2: #16161F;
+  --surface-3: #1E1E2A;
+  --border: #24242F;
+  --border-strong: #32323F;
 
-  --text: #16181b;
-  --text-2: #55595e;
-  --text-3: #7c8085;
+  --text: #FFFFFF;
+  --text-2: #A8A8BC;
+  --text-3: #6E6E85;
 
-  /* Основное действие — тёмный, не цветной: кнопка остаётся заметной,
-     но не превращается в рекламный элемент. */
-  --ink: #1d2126;
-  --ink-hover: #2c3138;
+  /* Основное действие — акцент дека. */
+  --ink: #4B3FFF;
+  --ink-hover: #6055FF;
 
-  /* Акцент только для ссылок и активного раздела. Приглушённый. */
-  --accent: #1f5aa6;
-  --accent-text: #174781;
-  --accent-soft: #eaf0f8;
-  --accent-border: #b9cce4;
+  --accent: #4B3FFF;
+  --accent-text: #A79FFF;
+  --accent-soft: rgba(75, 63, 255, 0.14);
+  --accent-border: rgba(75, 63, 255, 0.45);
+  --accent-glow: rgba(75, 63, 255, 0.35);
 
-  /* Статусы. Все проверены на контраст с белым фоном. */
-  --red: #b42318;
-  --red-soft: #fef3f2;
-  --red-border: #f0c2bd;
-  --green: #067647;
-  --green-soft: #ecfdf3;
-  --green-border: #b7e3ca;
-  --amber: #a15c07;
-  --amber-soft: #fffaeb;
-  --amber-border: #f0dcae;
+  /* Статусы — подняты по светлоте под тёмный фон. */
+  --red: #FF5C5C;
+  --red-soft: rgba(255, 92, 92, 0.12);
+  --red-border: rgba(255, 92, 92, 0.42);
+  --red-glow: rgba(255, 92, 92, 0.35);
+  --green: #35D08A;
+  --green-soft: rgba(53, 208, 138, 0.12);
+  --green-border: rgba(53, 208, 138, 0.40);
+  --amber: #FFB340;
+  --amber-soft: rgba(255, 179, 64, 0.12);
+  --amber-border: rgba(255, 179, 64, 0.40);
 
-  --radius: 8px;
-  --radius-sm: 6px;
-  --radius-lg: 12px;
-  --shadow-sm: 0 1px 2px rgba(20, 22, 26, 0.06);
-  --shadow: 0 4px 12px rgba(20, 22, 26, 0.08);
-  --shadow-lg: 0 12px 32px rgba(20, 22, 26, 0.14);
-  --ring: 0 0 0 3px rgba(31, 90, 166, 0.22);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-lg: 18px;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.7);
+  --ring: 0 0 0 3px rgba(75, 63, 255, 0.35);
 
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 html, body { height: 100%; margin: 0; overflow-x: clip; }
 
-/* Защита от горизонтального переполнения: даём flex/grid-детям сжиматься,
-   переносим длинные слова, ограничиваем медиа шириной контейнера. */
 .dash-grid > *, .two-col > *, .stack > *, .card, .card-pad { min-width: 0; }
 .net, .chart, canvas, svg, img, table, pre { max-width: 100%; }
 
@@ -84,69 +88,122 @@ body {
   overflow-wrap: break-word;
   -webkit-font-smoothing: antialiased;
 }
-a { color: var(--accent-text); text-decoration: none; }
-a:hover { text-decoration: underline; }
-h1, h2, h3, h4 { margin: 0; font-weight: 650; letter-spacing: -0.01em; color: var(--text); }
-h1 { font-size: 24px; }
-h2 { font-size: 19px; }
+
+/* Фоновое свечение и сетка точек из дека. Строго декоративно и под
+   всем содержимым, чтобы не перехватывать клики. */
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: -2; pointer-events: none;
+  background:
+    radial-gradient(900px 500px at 12% -10%, rgba(75, 63, 255, 0.16), transparent 70%),
+    radial-gradient(700px 500px at 105% 0%, rgba(75, 63, 255, 0.10), transparent 70%),
+    var(--bg);
+}
+body::after {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  opacity: 0.5;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 34px 34px;
+  mask-image: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent 65%);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent 65%);
+}
+
+a { color: var(--accent-text); text-decoration: none; transition: color 0.16s var(--ease); }
+a:hover { color: #C9C3FF; text-decoration: underline; }
+
+h1, h2, h3, h4 { margin: 0; font-weight: 700; letter-spacing: -0.02em; color: var(--text); }
+h1 { font-size: 30px; line-height: 1.15; }
+h2 { font-size: 21px; }
 h3 { font-size: 16px; }
+
 button { font-family: inherit; }
 input, select, textarea { font-family: inherit; font-size: 15px; }
 .mono { font-family: var(--mono); }
 code {
   font-family: var(--mono); background: var(--surface-2); padding: 1px 5px;
-  border-radius: 4px; font-size: 0.9em; border: 1px solid var(--border);
+  border-radius: 4px; font-size: 0.9em; border: 1px solid var(--border); color: var(--accent-text);
 }
-::selection { background: rgba(31, 90, 166, 0.16); }
+::selection { background: rgba(75, 63, 255, 0.4); color: #fff; }
 
-/* Обводка при навигации с клавиатуры — требование доступности. */
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg-deep); }
+::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 5px; border: 2px solid var(--bg-deep); }
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+
+/* ------------------------------------------------------------- анимации */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pulse-red {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 92, 92, 0.5); }
+  50%      { box-shadow: 0 0 0 7px rgba(255, 92, 92, 0); }
+}
+@keyframes sheen {
+  from { transform: translateX(-120%); }
+  to   { transform: translateX(320%); }
+}
+
+.page > * { animation: fade-up 0.5s var(--ease) backwards; }
+.page > *:nth-child(1) { animation-delay: 0.02s; }
+.page > *:nth-child(2) { animation-delay: 0.08s; }
+.page > *:nth-child(3) { animation-delay: 0.14s; }
+.page > *:nth-child(4) { animation-delay: 0.20s; }
+.page > *:nth-child(n+5) { animation-delay: 0.26s; }
 
 /* ---------------------------------------------------------- верхняя панель */
 .topbar {
   position: sticky; top: 0; z-index: 30;
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap; row-gap: 8px;
-  padding: 10px 24px;
-  background: var(--surface);
+  padding: 12px 24px;
+  background: rgba(8, 8, 12, 0.82);
+  backdrop-filter: saturate(160%) blur(14px);
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
   border-bottom: 1px solid var(--border);
 }
 .brand {
-  display: flex; align-items: center; gap: 10px;
-  font-weight: 650; font-size: 16px; color: var(--text); flex-shrink: 0;
+  display: flex; align-items: center; gap: 11px;
+  font-weight: 700; font-size: 17px; color: var(--text); flex-shrink: 0;
+  letter-spacing: -0.02em;
 }
-.brand:hover { text-decoration: none; }
+.brand:hover { text-decoration: none; color: var(--text); }
 .brand .logo {
-  width: 28px; height: 28px; border-radius: var(--radius-sm);
-  background: var(--ink); color: #fff;
-  display: grid; place-items: center; font-weight: 650; font-size: 14px;
+  width: 30px; height: 30px; border-radius: var(--radius-sm);
+  background: linear-gradient(140deg, #6055FF, #3D32E0);
+  color: #fff; box-shadow: 0 0 20px var(--accent-glow);
+  display: grid; place-items: center; font-weight: 800; font-size: 14px;
 }
 .topbar .who {
   color: var(--text-2); font-size: 13px; max-width: 240px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* Навигация. Правая часть собрана в .topbar-actions и прижата
-   margin-left:auto: прежняя распорка с flex:1 сама не сжималась, и всё
-   сжатие доставалось меню — оно схлопывалось в узкую полоску. */
 .topnav { display: flex; gap: 2px; align-items: center; margin-left: 8px; flex-shrink: 0; }
 .topbar-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-shrink: 0; }
 
 .navlink {
+  position: relative;
   display: inline-flex; align-items: center; gap: 7px;
-  padding: 7px 11px; border-radius: var(--radius-sm);
-  color: var(--text-2); text-decoration: none; font-size: 14px; font-weight: 500;
+  padding: 8px 13px; border-radius: var(--radius-sm);
+  color: var(--text-2); text-decoration: none; font-size: 14px; font-weight: 550;
   white-space: nowrap; flex-shrink: 0;
-  transition: background 0.12s, color 0.12s;
+  transition: background 0.16s var(--ease), color 0.16s var(--ease);
 }
 .navlink:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
-.navlink.on { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
+.navlink.on {
+  background: var(--accent-soft); color: #fff; font-weight: 650;
+  box-shadow: inset 0 0 0 1px var(--accent-border);
+}
 .navbadge {
-  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 4px;
-  background: var(--red); color: #fff; font-size: 11px; font-weight: 700;
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 5px;
+  background: var(--red); color: #fff; font-size: 11px; font-weight: 800;
   display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  box-shadow: 0 0 12px var(--red-glow);
 }
 
-.page { width: 100%; max-width: 1280px; margin: 0 auto; padding: 24px; }
+.page { width: 100%; max-width: 1280px; margin: 0 auto; padding: 28px 24px; }
 .page-narrow { max-width: 920px; }
 
 /* ------------------------------------------------------------------ подвал */
@@ -161,119 +218,168 @@ code {
 
 /* ----------------------------------------------------------------- карточки */
 .card {
-  background: var(--surface); border: 1px solid var(--border);
+  position: relative;
+  background: linear-gradient(180deg, var(--surface), var(--bg-deep));
+  border: 1px solid var(--border);
   border-radius: var(--radius); box-shadow: var(--shadow-sm);
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
 }
-.card-pad { padding: 18px 20px; }
+.card-pad { padding: 20px 22px; }
 .card-head {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  padding: 14px 20px; border-bottom: 1px solid var(--border);
+  padding: 15px 22px; border-bottom: 1px solid var(--border);
 }
-.card-head h3 { font-size: 15px; }
+.card-head h3 { font-size: 15px; letter-spacing: -0.01em; }
 .card-head .spacer, .spacer { flex: 1; min-width: 0; }
 .section-title {
-  font-size: 12px; font-weight: 650; text-transform: uppercase;
-  letter-spacing: 0.04em; color: var(--text-3); margin-bottom: 8px;
+  font-size: 11.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.10em; color: var(--text-3); margin-bottom: 9px;
 }
 .muted { color: var(--text-2); }
 .tiny { font-size: 12.5px; }
 
 /* ------------------------------------------------------------------ кнопки */
 .btn {
+  position: relative; overflow: hidden;
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  border: 1px solid var(--border-strong); background: var(--surface); color: var(--text);
-  border-radius: var(--radius-sm); padding: 8px 14px;
-  font-size: 14px; font-weight: 550; line-height: 1.3;
+  border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text);
+  border-radius: var(--radius-sm); padding: 9px 15px;
+  font-size: 14px; font-weight: 600; line-height: 1.3;
   cursor: pointer; white-space: nowrap;
-  transition: background 0.12s, border-color 0.12s;
+  transition: background 0.16s var(--ease), border-color 0.16s var(--ease),
+              transform 0.16s var(--ease), box-shadow 0.16s var(--ease);
 }
-.btn:hover { background: var(--surface-2); border-color: var(--text-3); }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-primary { background: var(--ink); border-color: var(--ink); color: #fff; font-weight: 600; }
-.btn-primary:hover { background: var(--ink-hover); border-color: var(--ink-hover); }
+.btn:hover { background: var(--surface-3); border-color: var(--border-strong); transform: translateY(-1px); }
+.btn:active { transform: translateY(0); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+.btn-primary {
+  background: linear-gradient(140deg, #6055FF, #4B3FFF);
+  border-color: transparent; color: #fff; font-weight: 700;
+  box-shadow: 0 4px 18px rgba(75, 63, 255, 0.36);
+}
+.btn-primary:hover {
+  background: linear-gradient(140deg, #6E63FF, #5449FF);
+  box-shadow: 0 6px 26px rgba(75, 63, 255, 0.5);
+}
+/* Блик по основной кнопке — только на наведении, один проход. */
+.btn-primary::after {
+  content: ""; position: absolute; top: 0; bottom: 0; width: 42px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.28), transparent);
+  transform: translateX(-120%); pointer-events: none;
+}
+.btn-primary:hover::after { animation: sheen 0.7s var(--ease); }
+
 .btn-ghost { border-color: transparent; background: transparent; color: var(--text-2); }
 .btn-ghost:hover { background: var(--surface-2); color: var(--text); border-color: transparent; }
 .btn-danger { color: var(--red); border-color: transparent; background: transparent; }
 .btn-danger:hover { background: var(--red-soft); border-color: var(--red-border); }
-.btn-sm { padding: 6px 11px; font-size: 13px; }
-.btn-lg { padding: 12px 20px; font-size: 16px; }
+.btn-sm { padding: 7px 12px; font-size: 13px; }
+.btn-lg { padding: 13px 22px; font-size: 16px; }
 
 /* --------------------------------------------------------------- поля ввода */
-.field { display: flex; flex-direction: column; gap: 5px; }
-.field label { font-size: 13px; font-weight: 600; color: var(--text-2); }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font-size: 13px; font-weight: 650; color: var(--text-2); }
 .input, .select, .textarea {
   width: 100%; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
-  padding: 9px 12px; background: var(--surface); color: var(--text); outline: none;
-  transition: border-color 0.12s, box-shadow 0.12s;
+  padding: 10px 13px; background: var(--bg-deep); color: var(--text); outline: none;
+  transition: border-color 0.16s var(--ease), box-shadow 0.16s var(--ease), background 0.16s var(--ease);
 }
-.input:focus, .select:focus, .textarea:focus { border-color: var(--accent); box-shadow: var(--ring); }
+.input:focus, .select:focus, .textarea:focus {
+  border-color: var(--accent); box-shadow: var(--ring); background: var(--surface);
+}
 .input::placeholder, .textarea::placeholder { color: var(--text-3); }
 .textarea { min-height: 84px; resize: vertical; line-height: 1.5; }
+.select option { background: var(--surface); color: var(--text); }
 .row { display: flex; gap: 12px; flex-wrap: wrap; }
 .row > * { flex: 1; min-width: 140px; }
 
 /* --------------------------------------------------------- статусы и метки */
 .badge, .pill {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 3px 9px; border-radius: 4px;
-  font-size: 12.5px; font-weight: 600; line-height: 1.5;
+  padding: 4px 10px; border-radius: 6px;
+  font-size: 12.5px; font-weight: 650; line-height: 1.5;
   border: 1px solid var(--border); background: var(--surface-2); color: var(--text-2);
 }
-.badge { font-weight: 650; }
-.badge .dot { width: 6px; height: 6px; border-radius: 2px; background: currentColor; }
+.badge { font-weight: 700; }
+.badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .badge-red { background: var(--red-soft); border-color: var(--red-border); color: var(--red); }
 .badge-green { background: var(--green-soft); border-color: var(--green-border); color: var(--green); }
-.chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 7px; }
 
 .stars { color: var(--amber); letter-spacing: 1px; }
 .stars .dim { color: var(--border-strong); }
-.delta-up { color: var(--green); font-weight: 650; }
-.delta-down { color: var(--red); font-weight: 650; }
+.delta-up { color: var(--green); font-weight: 700; }
+.delta-down { color: var(--red); font-weight: 700; }
 .delta-flat { color: var(--text-3); }
 
 /* --------------------------------------------------------- плитки с числами */
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; }
 .tile {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 14px 16px;
+  position: relative; overflow: hidden;
+  background: linear-gradient(180deg, var(--surface), var(--bg-deep));
+  border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px 18px;
+  transition: border-color 0.2s var(--ease), transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+.tile:hover {
+  border-color: var(--accent-border); transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+/* Тонкая светящаяся полоса сверху — маркер «это показатель». */
+.tile::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-border), transparent);
 }
 .tile .tile-label {
-  font-size: 12px; font-weight: 600; color: var(--text-3);
-  text-transform: uppercase; letter-spacing: 0.03em;
+  font-size: 11.5px; font-weight: 700; color: var(--text-3);
+  text-transform: uppercase; letter-spacing: 0.09em;
 }
-.tile .tile-value { font-size: 27px; font-weight: 650; line-height: 1.2; margin-top: 4px; color: var(--text); }
-.tile .tile-sub { font-size: 12.5px; color: var(--text-2); margin-top: 2px; }
-.tile-hero { grid-column: span 2; background: var(--surface-2); border-color: var(--border-strong); }
-.tile-hero .tile-value { font-size: 40px; }
+.tile .tile-value {
+  font-size: 32px; font-weight: 750; line-height: 1.1; margin-top: 6px; color: var(--text);
+  letter-spacing: -0.03em; font-variant-numeric: tabular-nums;
+}
+.tile .tile-sub { font-size: 12.5px; color: var(--text-2); margin-top: 3px; }
+.tile-hero {
+  grid-column: span 2;
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(75, 63, 255, 0.20), transparent 60%),
+    linear-gradient(180deg, var(--surface), var(--bg-deep));
+  border-color: var(--accent-border);
+}
+.tile-hero .tile-value {
+  font-size: 50px; letter-spacing: -0.04em;
+  text-shadow: 0 0 34px var(--accent-glow);
+}
 
 /* ---------------------------------------------------------------- таблицы */
 .table { width: 100%; border-collapse: collapse; }
 .table th {
-  text-align: left; font-size: 12px; font-weight: 650; color: var(--text-3);
-  text-transform: uppercase; letter-spacing: 0.03em;
-  padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap;
+  text-align: left; font-size: 11.5px; font-weight: 700; color: var(--text-3);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  padding: 11px 13px; border-bottom: 1px solid var(--border); white-space: nowrap;
 }
-.table td { padding: 11px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.table td { padding: 12px 13px; border-bottom: 1px solid var(--border); vertical-align: middle; }
 .table tbody tr:last-child td { border-bottom: 0; }
 .table .num { text-align: right; font-variant-numeric: tabular-nums; }
-.table tbody tr.clickable { cursor: pointer; }
+.table tbody tr.clickable { cursor: pointer; transition: background 0.14s var(--ease); }
 .table tbody tr.clickable:hover { background: var(--surface-2); }
 
 /* ---------------------------------------------------------------- макеты */
-.dash-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 18px; }
-.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
-.stack { display: flex; flex-direction: column; gap: 14px; }
+.dash-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 20px; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.stack { display: flex; flex-direction: column; gap: 16px; }
 .center { min-height: 70vh; display: grid; place-items: center; }
 .breadcrumb {
   display: flex; gap: 7px; align-items: center;
-  font-size: 13px; color: var(--text-3); margin-bottom: 6px;
+  font-size: 13px; color: var(--text-3); margin-bottom: 8px;
 }
-.empty { text-align: center; padding: 30px 16px; color: var(--text-2); }
-.empty .big { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.empty { text-align: center; padding: 34px 16px; color: var(--text-2); }
+.empty .big { font-size: 16px; font-weight: 650; color: var(--text); margin-bottom: 5px; }
 
 .list-item {
   display: flex; gap: 12px; align-items: flex-start;
-  padding: 12px 0; border-bottom: 1px solid var(--border);
+  padding: 13px 0; border-bottom: 1px solid var(--border);
 }
 .list-item:last-child { border-bottom: 0; }
 .list-item .when { flex: 0 0 120px; color: var(--text-3); font-size: 13px; }
@@ -282,7 +388,7 @@ code {
 /* ------------------------------------------------------------- уведомления */
 .alert {
   border: 1px solid var(--border); border-radius: var(--radius-sm);
-  padding: 11px 14px; font-size: 14px; line-height: 1.5;
+  padding: 12px 15px; font-size: 14px; line-height: 1.5;
   background: var(--surface-2); color: var(--text);
 }
 .alert-info { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent-text); }
@@ -290,209 +396,262 @@ code {
 .alert-warn { background: var(--amber-soft); border-color: var(--amber-border); color: var(--amber); }
 .alert-error { background: var(--red-soft); border-color: var(--red-border); color: var(--red); }
 
-/* Полоса «резкое падение связей» над графом. */
+/* Полоса «резкое падение связей» над графом — главный сигнал в продукте,
+   поэтому она светится и пульсирует. */
 .dropbar {
-  border: 1px solid var(--red-border); background: var(--red-soft);
-  border-radius: var(--radius); margin-bottom: 18px;
+  border: 1px solid var(--red-border);
+  background: linear-gradient(180deg, rgba(255, 92, 92, 0.13), rgba(255, 92, 92, 0.05));
+  border-radius: var(--radius); margin-bottom: 20px;
+  box-shadow: 0 0 34px rgba(255, 92, 92, 0.13);
+  animation: pulse-red 2.6s ease-in-out 3;
 }
 .dp-item {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  padding: 7px 0; border-top: 1px solid var(--red-border); font-size: 14px;
+  padding: 8px 0; border-top: 1px solid var(--red-border); font-size: 14px;
 }
 .dp-item:first-of-type { border-top: 0; }
 
 /* ------------------------------------------------------------------- модал */
 .modal-backdrop {
   position: fixed; inset: 0; z-index: 60;
-  background: rgba(20, 22, 26, 0.45);
+  background: rgba(3, 3, 6, 0.74);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   display: grid; place-items: center; padding: 20px;
+  animation: fade-in 0.2s var(--ease);
 }
 .modal {
   width: 100%; max-width: 540px; max-height: 88vh; display: flex; flex-direction: column;
-  background: var(--surface); border: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
+  animation: fade-up 0.32s var(--ease);
 }
 .modal.wide { max-width: 860px; }
 .modal-head {
   display: flex; align-items: center; gap: 10px;
-  padding: 16px 20px; border-bottom: 1px solid var(--border);
+  padding: 17px 22px; border-bottom: 1px solid var(--border);
 }
-.modal-head h3 { flex: 1; font-size: 16px; }
-.modal-body { padding: 18px 20px; overflow-y: auto; }
+.modal-head h3 { flex: 1; font-size: 17px; }
+.modal-body { padding: 20px 22px; overflow-y: auto; }
 .modal-foot {
   display: flex; gap: 10px; align-items: center;
-  padding: 14px 20px; border-top: 1px solid var(--border); background: var(--surface-2);
+  padding: 15px 22px; border-top: 1px solid var(--border); background: var(--bg-deep);
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
-/* Пока окно открыто, страница под ним не прокручивается. */
 body.modal-open { overflow: hidden; }
 
-/* Часть окна, которая уходит на печать: список кодов и отчёт по классу.
-   Своего оформления не имеет — служит меткой для правил печати ниже. */
 .print-area { display: block; }
 
 /* ------------------------------------------------------------------ загрузка */
 .spinner {
-  width: 24px; height: 24px; border-radius: 50%;
-  border: 2px solid var(--border-strong); border-top-color: var(--text-2);
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 2px solid var(--surface-3); border-top-color: var(--accent);
   animation: spin 0.7s linear infinite; margin: 0 auto;
+  box-shadow: 0 0 18px var(--accent-glow);
 }
 @keyframes spin { to { transform: rotate(360deg); } }
-/* Уважаем системную настройку «уменьшить движение». */
+
+/* Системная настройка «уменьшить движение» выключает всё движение целиком. */
 @media (prefers-reduced-motion: reduce) {
   .spinner { animation-duration: 2s; }
   * { transition-duration: 0.01ms !important; }
+  .page > *, .modal, .modal-backdrop, .dropbar, .btn-primary::after {
+    animation: none !important;
+  }
 }
 
 /* --------------------------------------------------------------- социограмма */
 .net {
   height: 560px; border: 1px solid var(--border); border-radius: var(--radius);
-  background: var(--surface-2);
+  background:
+    radial-gradient(70% 70% at 50% 45%, rgba(75, 63, 255, 0.09), transparent 70%),
+    var(--bg-deep);
+  animation: fade-in 0.6s var(--ease);
 }
-.toolbar { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; padding: 0 0 12px; }
+.toolbar { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; padding: 0 0 14px; }
 .check {
-  display: inline-flex; align-items: center; gap: 7px;
-  font-size: 13.5px; font-weight: 500; color: var(--text-2);
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 13.5px; font-weight: 550; color: var(--text-2);
   border: 1px solid var(--border); border-radius: var(--radius-sm);
-  padding: 6px 11px; cursor: pointer; user-select: none; background: var(--surface);
+  padding: 7px 12px; cursor: pointer; user-select: none; background: var(--surface-2);
+  transition: border-color 0.16s var(--ease), color 0.16s var(--ease), background 0.16s var(--ease);
 }
-.check:hover { border-color: var(--border-strong); color: var(--text); }
+.check:hover { border-color: var(--border-strong); color: var(--text); background: var(--surface-3); }
 .check input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
-.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 12px; font-size: 13px; color: var(--text-2); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 14px; font-size: 13px; color: var(--text-2); }
 .legend .item { display: inline-flex; align-items: center; gap: 7px; }
 .legend .swatch { width: 11px; height: 11px; border-radius: 3px; }
 .legend .line { width: 20px; border-top: 2px solid var(--border-strong); }
 
 /* Ползунок переключения срезов. */
-.slider-wrap { display: flex; flex-direction: column; gap: 5px; }
+.slider-wrap { display: flex; flex-direction: column; gap: 6px; }
 .slider { width: 100%; accent-color: var(--accent); cursor: pointer; }
 .slider-ticks { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--text-3); }
 .progress { height: 6px; background: var(--surface-3); border-radius: 3px; overflow: hidden; }
-.progress > span { display: block; height: 100%; background: var(--accent); }
+.progress > span {
+  display: block; height: 100%;
+  background: linear-gradient(90deg, #4B3FFF, #8A80FF);
+  box-shadow: 0 0 12px var(--accent-glow);
+  transition: width 0.5s var(--ease);
+}
 
 /* График динамики (SVG). */
 .chart { width: 100%; height: 170px; }
 .chart .gridline { stroke: var(--border); stroke-width: 1; }
-.chart .line { fill: none; stroke: var(--accent); stroke-width: 2; }
-.chart .area { fill: rgba(31, 90, 166, 0.08); }
+.chart .line {
+  fill: none; stroke: var(--accent); stroke-width: 2.5;
+  filter: drop-shadow(0 0 7px var(--accent-glow));
+}
+.chart .area { fill: rgba(75, 63, 255, 0.16); }
 
 /* ------------------------------------------------------- коды для печати */
-.qr-box { display: grid; place-items: center; padding: 14px; background: #fff; border: 1px solid var(--border); border-radius: var(--radius); }
-.code-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.qr-box {
+  display: grid; place-items: center; padding: 14px; background: #fff;
+  border: 1px solid var(--border); border-radius: var(--radius);
+}
+.code-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 11px; }
 .code-card {
   border: 1px solid var(--border); border-radius: var(--radius-sm);
-  padding: 10px 12px; background: var(--surface); text-align: center;
+  padding: 12px; background: var(--surface-2); text-align: center;
 }
-.code-card .nm { font-size: 12.5px; color: var(--text-2); margin-bottom: 3px; }
-.code-card .cd { font-family: var(--mono); font-size: 19px; font-weight: 700; letter-spacing: 2px; }
-.code-card.done { opacity: 0.55; }
+.code-card .nm { font-size: 12.5px; color: var(--text-2); margin-bottom: 4px; }
+.code-card .cd {
+  font-family: var(--mono); font-size: 20px; font-weight: 800; letter-spacing: 3px;
+  color: var(--accent-text);
+}
+.code-card.done { opacity: 0.45; }
 
 /* ------------------------------------------------- главный экран: классы */
-.class-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); }
-.classcard { cursor: pointer; transition: border-color 0.12s, box-shadow 0.12s; }
-.classcard:hover { border-color: var(--border-strong); box-shadow: var(--shadow); }
-.classcard.urgent { border-left: 3px solid var(--red); }
+.class-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); }
+.classcard {
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease), transform 0.2s var(--ease);
+}
+.classcard:hover {
+  border-color: var(--accent-border); transform: translateY(-3px);
+  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--accent-border);
+}
+.classcard.urgent {
+  border-left: 3px solid var(--red);
+  box-shadow: inset 14px 0 30px -18px var(--red-glow);
+}
 
-/* Сценарий занятия: многострочный текст, но обычным шрифтом — это
-   методичка, а не код. */
 .plan-text {
   white-space: pre-wrap; font-family: inherit; font-size: 13.5px; line-height: 1.6;
-  color: var(--text-2); background: var(--surface-2);
+  color: var(--text-2); background: var(--bg-deep);
   border: 1px solid var(--border); border-radius: var(--radius-sm);
-  padding: 12px 14px; margin-top: 8px; overflow-x: auto;
+  padding: 13px 15px; margin-top: 9px; overflow-x: auto;
 }
 details > summary { cursor: pointer; }
 details[open] > summary { margin-bottom: 2px; }
 
 /* ------------------------------------------------------- страница опроса */
-.survey-shell { max-width: 620px; margin: 0 auto; padding: 24px 18px 60px; }
-.survey-hero { text-align: center; margin-bottom: 20px; }
+.survey-shell { max-width: 620px; margin: 0 auto; padding: 28px 18px 60px; }
+.survey-hero { text-align: center; margin-bottom: 22px; animation: fade-up 0.5s var(--ease); }
 .survey-hero .hicon {
-  width: 52px; height: 52px; border-radius: var(--radius); margin: 0 auto 12px;
-  background: var(--ink); color: #fff;
-  display: grid; place-items: center; font-size: 22px; font-weight: 650;
+  width: 56px; height: 56px; border-radius: var(--radius); margin: 0 auto 14px;
+  background: linear-gradient(140deg, #6055FF, #3D32E0); color: #fff;
+  box-shadow: 0 0 34px var(--accent-glow);
+  display: grid; place-items: center; font-size: 23px; font-weight: 750;
 }
-.survey-hero h1 { font-size: 22px; }
-.survey-hero .sub { color: var(--text-2); font-size: 14px; margin-top: 4px; }
+.survey-hero h1 { font-size: 25px; }
+.survey-hero .sub { color: var(--text-2); font-size: 14px; margin-top: 6px; }
 
 .survey-progress {
   display: flex; align-items: center; gap: 12px;
-  padding: 10px 14px; margin-bottom: 14px;
+  padding: 11px 15px; margin-bottom: 16px;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
 }
 .survey-progress .lbl { font-size: 13px; color: var(--text-2); white-space: nowrap; }
 .survey-progress .bar { flex: 1; height: 6px; background: var(--surface-3); border-radius: 3px; overflow: hidden; }
-.survey-progress .bar > span { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }
+.survey-progress .bar > span {
+  display: block; height: 100%; width: 0;
+  background: linear-gradient(90deg, #4B3FFF, #8A80FF);
+  box-shadow: 0 0 12px var(--accent-glow);
+  transition: width 0.35s var(--ease);
+}
 
-.q-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
-.q-head { display: flex; align-items: flex-start; gap: 11px; margin-bottom: 6px; }
+.q-card {
+  background: linear-gradient(180deg, var(--surface), var(--bg-deep));
+  border: 1px solid var(--border); border-radius: var(--radius); padding: 22px;
+  animation: fade-up 0.35s var(--ease);
+}
+.q-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 7px; }
 .q-num {
-  flex-shrink: 0; width: 26px; height: 26px; border-radius: var(--radius-sm);
-  background: var(--surface-2); border: 1px solid var(--border);
-  display: grid; place-items: center; font-size: 13px; font-weight: 700; color: var(--text-2);
+  flex-shrink: 0; width: 28px; height: 28px; border-radius: var(--radius-sm);
+  background: var(--accent-soft); border: 1px solid var(--accent-border);
+  display: grid; place-items: center; font-size: 13px; font-weight: 800; color: var(--accent-text);
 }
-.q-title { font-size: 18px; font-weight: 600; line-height: 1.35; }
-.q-hint { font-size: 13.5px; color: var(--text-2); margin: 0 0 14px 37px; }
-.choice-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.q-title { font-size: 19px; font-weight: 650; line-height: 1.35; letter-spacing: -0.01em; }
+.q-hint { font-size: 13.5px; color: var(--text-2); margin: 0 0 16px 40px; }
+.choice-grid { display: flex; flex-wrap: wrap; gap: 9px; }
 .choice {
-  display: inline-flex; align-items: center; gap: 9px;
-  padding: 9px 14px 9px 9px; border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong); background: var(--surface);
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 10px 15px 10px 10px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong); background: var(--surface-2);
   cursor: pointer; font-size: 15px; color: var(--text);
-  transition: background 0.12s, border-color 0.12s;
+  transition: background 0.16s var(--ease), border-color 0.16s var(--ease), transform 0.16s var(--ease);
 }
-.choice:hover { border-color: var(--text-3); background: var(--surface-2); }
-.choice.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+.choice:hover { border-color: var(--text-3); background: var(--surface-3); transform: translateY(-1px); }
+.choice.on {
+  background: var(--accent-soft); border-color: var(--accent); color: #fff; font-weight: 650;
+  box-shadow: 0 0 0 1px var(--accent-border), 0 4px 18px rgba(75, 63, 255, 0.28);
+}
 .choice .ini {
-  width: 26px; height: 26px; border-radius: var(--radius-sm);
-  background: var(--surface-2); border: 1px solid var(--border);
-  display: grid; place-items: center; font-size: 11.5px; font-weight: 700; color: var(--text-2);
+  width: 28px; height: 28px; border-radius: var(--radius-sm);
+  background: var(--surface-3); border: 1px solid var(--border);
+  display: grid; place-items: center; font-size: 11.5px; font-weight: 800; color: var(--text-2);
+  transition: background 0.16s var(--ease), color 0.16s var(--ease);
 }
-.choice.on .ini { background: var(--accent); border-color: var(--accent); color: #fff; }
-.survey-nav { display: flex; gap: 10px; margin-top: 18px; }
-.survey-nav .btn { min-height: 46px; }
+.choice.on .ini {
+  background: linear-gradient(140deg, #6055FF, #4B3FFF);
+  border-color: transparent; color: #fff;
+}
+.survey-nav { display: flex; gap: 10px; margin-top: 20px; }
+.survey-nav .btn { min-height: 48px; }
 .done-circle {
-  width: 68px; height: 68px; border-radius: 50%; margin: 0 auto 16px;
+  width: 74px; height: 74px; border-radius: 50%; margin: 0 auto 18px;
   background: var(--green-soft); border: 2px solid var(--green-border); color: var(--green);
-  display: grid; place-items: center; font-size: 30px;
+  display: grid; place-items: center; font-size: 32px;
+  box-shadow: 0 0 40px rgba(53, 208, 138, 0.3);
+  animation: fade-up 0.45s var(--ease);
 }
 
 /* Переключатель языка на странице опроса. */
 .lang-switch {
   display: flex; gap: 2px; justify-content: flex-end; width: fit-content;
-  margin: 0 0 14px auto; padding: 2px;
+  margin: 0 0 16px auto; padding: 3px;
   background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
 }
 .lang-btn {
-  padding: 5px 13px; border: 0; border-radius: 4px; cursor: pointer;
+  padding: 6px 14px; border: 0; border-radius: 6px; cursor: pointer;
   background: transparent; color: var(--text-2);
-  font-family: inherit; font-size: 13px; font-weight: 600;
-  transition: background 0.12s, color 0.12s;
+  font-family: inherit; font-size: 13px; font-weight: 650;
+  transition: background 0.16s var(--ease), color 0.16s var(--ease);
 }
 .lang-btn:hover { color: var(--text); }
-.lang-btn.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+.lang-btn.on { background: var(--accent-soft); color: #fff; box-shadow: inset 0 0 0 1px var(--accent-border); }
 
 /* --------------------------------------------- правовые страницы (статика) */
-.legal { max-width: 760px; margin: 0 auto; padding: 32px 24px 64px; }
-.legal h1 { margin-bottom: 6px; }
-.legal .updated { color: var(--text-3); font-size: 13px; margin-bottom: 26px; }
-.legal h2 { margin: 28px 0 8px; font-size: 17px; }
+.legal { max-width: 760px; margin: 0 auto; padding: 36px 24px 64px; }
+.legal h1 { margin-bottom: 7px; }
+.legal .updated { color: var(--text-3); font-size: 13px; margin-bottom: 28px; }
+.legal h2 { margin: 30px 0 9px; font-size: 18px; }
 .legal p, .legal li { color: var(--text-2); line-height: 1.65; }
 .legal ul { padding-left: 20px; }
-.legal li { margin-bottom: 5px; }
-.legal strong { color: var(--text); font-weight: 600; }
-.legal .back { display: inline-block; margin-bottom: 20px; font-size: 14px; }
+.legal li { margin-bottom: 6px; }
+.legal strong { color: var(--text); font-weight: 650; }
+.legal .back { display: inline-block; margin-bottom: 22px; font-size: 14px; }
 
 /* ------------------------------------------------------------------ адаптив */
 @media (max-width: 1240px) {
   .topbar .who { display: none; }
-  .navlink { padding: 7px 10px; font-size: 13.5px; }
+  .navlink { padding: 8px 11px; font-size: 13.5px; }
 }
 @media (max-width: 980px) {
   .dash-grid, .two-col { grid-template-columns: 1fr; }
   .net { height: 480px; }
-  /* Меню на отдельной строке во всю ширину; при нехватке места
-     прокручивается по горизонтали, а не ломает страницу. */
   .topnav {
     order: 10; width: 100%; margin-left: 0;
     flex-shrink: 1; min-width: 0;
@@ -502,30 +661,32 @@ details[open] > summary { margin-bottom: 2px; }
   .topnav::-webkit-scrollbar { display: none; }
 }
 @media (max-width: 760px) {
-  .page { padding: 16px 13px; }
+  .page { padding: 18px 13px; }
   .sitefoot { padding: 16px 13px 26px; }
   .net { height: 400px; }
-  .card-pad { padding: 15px 16px; }
-  .card-head { padding: 13px 16px; }
-  .modal-body { padding: 16px; }
+  .card-pad { padding: 16px 17px; }
+  .card-head { padding: 14px 17px; }
+  .modal-body { padding: 17px; }
   .tiles { grid-template-columns: repeat(auto-fit, minmax(126px, 1fr)); }
-  .table th, .table td { padding: 9px 10px; }
+  .table th, .table td { padding: 10px 11px; }
+  h1 { font-size: 25px; }
+  .tile-hero .tile-value { font-size: 40px; }
 }
 @media (max-width: 560px) {
-  .topbar { padding: 9px 13px; }
+  .topbar { padding: 10px 13px; }
   .hide-sm { display: none !important; }
-  .navlink { padding: 7px 9px; font-size: 13px; }
+  .navlink { padding: 7px 10px; font-size: 13px; }
   .topbar-actions { gap: 6px; }
   .net { height: 340px; }
   .table { font-size: 13.5px; }
   .list-item { flex-direction: column; gap: 3px; }
   .list-item .when { flex-basis: auto; }
   .modal-foot { flex-wrap: wrap; }
-  .survey-shell { padding: 18px 13px 56px; }
-  .q-card { padding: 16px; }
-  .q-title { font-size: 16.5px; }
+  .survey-shell { padding: 20px 13px 56px; }
+  .q-card { padding: 17px; }
+  .q-title { font-size: 17px; }
   .q-hint { margin-left: 0; }
-  h1 { font-size: 21px; }
+  h1 { font-size: 22px; }
 }
 @media (max-width: 400px) {
   .page { padding: 13px 10px; }
@@ -536,22 +697,33 @@ details[open] > summary { margin-bottom: 2px; }
 }
 
 /* -------------------------------------------------------------------- печать
-   Печатают список кодов и отчёт по классу. Всё служебное убираем, фон белый,
-   текст чёрный — иначе уходит тонна тонера и коды плохо читаются. */
+   На бумагу уходит документ, а не тёмная тема: фон белый, текст чёрный,
+   свечения и градиенты сняты — иначе уходит тонна тонера и коды не читаются. */
 @media print {
   .no-print, .topbar, .topnav, .sitefoot, .btn, .modal-foot, .modal-head { display: none !important; }
   body { background: #fff; color: #000; font-size: 12pt; overflow: visible; }
-  /* Печать вызывается только из окна (коды, отчёт), поэтому экран под ним на
-     бумагу не отправляем. Без этого печатались ещё и граф со списком класса. */
+  body::before, body::after { display: none !important; }
   body.modal-open main.page { display: none !important; }
-  .modal-backdrop { position: static; background: none; padding: 0; display: block; }
-  .modal, .modal.wide { max-width: 100%; max-height: none; border: 0; box-shadow: none; border-radius: 0; }
+  .modal-backdrop {
+    position: static; background: none; padding: 0; display: block;
+    backdrop-filter: none; -webkit-backdrop-filter: none; animation: none;
+  }
+  .modal, .modal.wide {
+    max-width: 100%; max-height: none; border: 0; box-shadow: none;
+    border-radius: 0; background: #fff; animation: none;
+  }
   .modal-body { overflow: visible; padding: 0; }
-  .card { border: 1px solid #999; box-shadow: none; }
+  .card, .tile, .code-card, .q-card {
+    border: 1px solid #999; box-shadow: none; background: #fff; color: #000;
+  }
+  .tile::before { display: none; }
   .code-grid { grid-template-columns: repeat(4, 1fr); gap: 6px; }
   .code-card { border: 1px solid #999; page-break-inside: avoid; }
   .code-card .nm { color: #333; }
   .code-card .cd { color: #000; }
-  .table th, .table td { border-bottom: 1px solid #ccc; }
+  .table th, .table td { border-bottom: 1px solid #ccc; color: #000; }
+  .table th { color: #333; }
   .qr-box { border: 1px solid #999; }
+  h1, h2, h3, h4, .tile .tile-value { color: #000; text-shadow: none; }
+  .muted, .tiny, .tile .tile-label, .tile .tile-sub { color: #333; }
 }

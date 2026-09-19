@@ -7,14 +7,17 @@ from fastapi.staticfiles import StaticFiles
 
 from . import models  # noqa: F401  (register models on Base)
 from .config import ALLOWED_ORIGINS
-from .database import Base, engine
 from .routers import alerts, audit, auth, dashboard, prevention, public, school
 
-# Схема управляется миграциями Alembic (`alembic upgrade head`). create_all
-# оставлен только для пустой базы — на уже существующей он не меняет ничего и
-# молча оставляет схему устаревшей, из-за чего приложение падало бы на новых
-# колонках. См. README, раздел «Миграции».
-Base.metadata.create_all(bind=engine)
+# Схему создаёт и обновляет ТОЛЬКО Alembic (`alembic upgrade head`; на Render —
+# в buildCommand, см. render.yaml). Здесь когда-то стоял create_all «на случай
+# пустой базы», и именно он ломал развёртывание: на пустой базе он создавал
+# таблицы, не записав версию в alembic_version, после чего upgrade падал на
+# уже существующих таблицах. База оставалась с таблицами от новых моделей и
+# без новых КОЛОНОК в старых таблицах (create_all их не добавляет никогда) —
+# приложение падало с UndefinedColumn на первом же запросе.
+# Тесты создают схему сами (tests/helpers.fresh_client).
+# Как чинить такую базу — см. README, раздел «Миграции».
 
 app = FastAPI(title="Изолят", description="Раннее выявление социальной изоляции школьников")
 

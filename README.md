@@ -268,6 +268,64 @@ alembic stamp 0001
 alembic upgrade head
 ```
 
+### Если приложение падает с `UndefinedColumn`
+
+Симптом: 500 на `/api/auth/login`, в логах
+`column psychologists.school_id does not exist`.
+
+Причина: база создавалась не Alembic, а `create_all` (он стоял в `app/main.py`
+до появления этого раздела). Он создаёт таблицы, **не записывая версию** в
+`alembic_version`, поэтому `upgrade head` затем падает на уже существующих
+таблицах. И главное: в уже существующие таблицы `create_all` **не добавляет
+новые колонки никогда** — новые таблицы появляются, а старые остаются в схеме
+`0001`.
+
+Диагностика (SQL Editor в Supabase):
+
+```sql
+SELECT * FROM alembic_version;              -- нет таблицы -> Alembic не отрабатывал
+SELECT column_name FROM information_schema.columns
+WHERE table_name = 'psychologists' ORDER BY column_name;
+```
+
+Если таблиц 17 (полный набор), а в `psychologists` всего 5 колонок, схему
+нужно догнать вручную: `alembic stamp` здесь не поможет — колонок физически
+нет, а `upgrade` не пройдёт, потому что таблицы уже есть.
+
+**Сначала выгрузи данные** (Table Editor -> Export CSV: `students`, `choices`,
+`surveys`, `survey_responses`). На free tier автобэкапов нет.
+
+```sql
+BEGIN;
+ALTER TABLE psychologists ADD COLUMN school_id INTEGER
+  REFERENCES schools(id) ON DELETE SET NULL;
+ALTER TABLE psychologists ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'psychologist';
+ALTER TABLE psychologists ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE psychologists ADD COLUMN token_version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE psychologists ADD COLUMN last_login_at TIMESTAMPTZ;
+CREATE INDEX ix_psychologists_school_id ON psychologists(school_id);
+
+ALTER TABLE classes ADD COLUMN school_id INTEGER
+  REFERENCES schools(id) ON DELETE SET NULL;
+ALTER TABLE classes ADD COLUMN retention_until DATE;
+CREATE INDEX ix_classes_school_id ON classes(school_id);
+
+ALTER TABLE students ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE surveys ADD COLUMN closed_at TIMESTAMPTZ;
+
+CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL,
+  CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num));
+INSERT INTO alembic_version VALUES ('0003');
+COMMIT;
+```
+
+После этого существующие аккаунты получают `role = 'psychologist'` и
+`school_id = NULL` — администратора назначь вручную:
+
+```sql
+UPDATE psychologists SET role = 'admin' WHERE email = '...';
+```
+
 `alembic.ini` намеренно без кириллицы: configparser читает его в системной
 кодировке, и на русской Windows не-ASCII комментарии ломают запуск.
 
