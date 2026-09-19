@@ -8,7 +8,10 @@ services:
     plan: free
     # Миграции накатываются на этапе сборки, до старта воркеров: иначе
     # приложение поднялось бы на старой схеме и упало на новых колонках.
-    buildCommand: pip install -r requirements.txt && alembic upgrade head
+    # Сид идемпотентный: демо-классы пересоздаются при каждом деплое, а классы,
+    # заведённые вручную, он не трогает. Нужен, чтобы по публичной ссылке было
+    # что смотреть сразу, без регистрации.
+    buildCommand: pip install -r requirements.txt && alembic upgrade head && python -m app.seed
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
     envVars:
